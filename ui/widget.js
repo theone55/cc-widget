@@ -123,14 +123,14 @@ function render() {
   fit()
 }
 
-// Size. Auto (the default): the window is as tall as what it shows, 300 px wide.
-// Yours: once you drag an edge, the window keeps exactly that size and the widget never resizes it (so it doesn't
-// fight the mouse); the layout adapts LIVE on every resize step, so what you see while dragging is what stays.
-// Double-click the header to go back to auto.
-// No scrolling: when everything doesn't fit, it gets denser step by step — 1 no details + lower rows,
-// 2 sessions as chips, 3 only the status dots. Narrow widths drop the numbers (CSS).
-let fixed = load('size', null)       // {w, h} in logical px, or null = auto
+// Size. The height always follows what the widget shows — a session that starts adds a line, one that ends takes it
+// away. The width and the LAYOUT are yours: drag an edge and the layout adapts live to the height you drag to
+// (full → 1 no details + lower rows → 2 sessions as chips → 3 only the status dots); when you let go, that layout
+// stays and the height snaps to its content. Double-click the header for the defaults (300 px, the full layout).
+// Narrow widths drop the numbers (CSS). No scrolling.
+let fixed = load('size', null)       // {w, level} — your width and layout, or null = the defaults
 let ourResize = 0
+let dragging = null                  // the timer that ends a drag
 const DENSE = ['dense1', 'dense2', 'dense3']
 // the content's real height: the lowest visible child's bottom (scrollHeight is never below the box's own height)
 const contentOf = (el) => {
@@ -143,21 +143,20 @@ const contentOf = (el) => {
   return bottom
 }
 const natural = () => $('head').offsetHeight + contentOf(editing ? $('settings') : $('view')) + 16
-// the least dense layout that fits the window's height
+const setLevel = (level) => DENSE.forEach((d, i) => document.body.classList.toggle(d, !editing && i < level))
+// while dragging: the least dense layout that fits the height under the mouse
 function densify() {
-  document.body.classList.remove(...DENSE)
-  if (!fixed || editing) return
-  for (const d of DENSE) {
-    if (natural() <= $('box').clientHeight + 2) break
-    document.body.classList.add(d)
-  }
+  setLevel(0)
+  let level = 0
+  while (level < DENSE.length && natural() > $('box').clientHeight + 2) setLevel(++level)
+  return level
 }
 async function fit() {
-  densify()
-  // the settings get room of their own; your size comes back when they close (closeSettings)
-  if (fixed && !editing) return
+  if (dragging) return                // the mouse owns the size until it lets go
+  setLevel(fixed ? fixed.level || 0 : 0)
+  const w = editing ? Math.max(fixed ? fixed.w : 300, 340) : fixed ? fixed.w : 300
   ourResize = Date.now()
-  await win.setSize(new LogicalSize(editing ? 340 : 300, Math.max(40, Math.min(natural(), 640)))).catch(() => {})
+  await win.setSize(new LogicalSize(w, Math.max(40, Math.min(natural(), editing ? 640 : 900)))).catch(() => {})
 }
 
 // a click (not a drag) on the header toggles the details; ⚙ opens the settings; a click on a session = "seen"
@@ -166,6 +165,8 @@ $('head').addEventListener('mousedown', e => { down = {x: e.screenX, y: e.screen
 function autoSize() {
   if (!fixed) return
   fixed = null
+  clearTimeout(dragging)
+  dragging = null
   save('size', null)
   fit()
 }
@@ -331,7 +332,6 @@ $('settings').addEventListener('submit', async e => {
 
 function closeSettings() {
   editing = false
-  if (fixed) { ourResize = Date.now(); win.setSize(new LogicalSize(fixed.w, fixed.h)).catch(() => {}) }
   $('settings').hidden = true
   $('settings').innerHTML = ''
   $('view').hidden = false
@@ -367,13 +367,15 @@ async function pollCounter() {
   win.onMoved(({payload}) => save('pos', {x: payload.x, y: payload.y}))
   // a resize by you (not by fit()): from now on the size is yours; the layout follows every step
   win.onResized(async ({payload}) => {
-    if (Date.now() - ourResize < 400) return
+    if (Date.now() - ourResize < 400 || editing) return
     const sf = await win.scaleFactor().catch(() => 1)
-    fixed = {w: Math.round(payload.width / sf), h: Math.round(payload.height / sf)}
-    save('size', fixed)
-    requestAnimationFrame(densify)
+    clearTimeout(dragging)
+    dragging = setTimeout(() => { dragging = null; fit() }, 450)   // let go → the height snaps to the content
+    requestAnimationFrame(() => {
+      fixed = {w: Math.round(payload.width / sf), level: densify()}
+      save('size', fixed)
+    })
   })
-  if (fixed) await win.setSize(new LogicalSize(fixed.w, fixed.h)).catch(() => {})
   try { localStorage.removeItem('width'); localStorage.removeItem('maxH') } catch (e) {}
   await pollSessions()
   pollCounter()

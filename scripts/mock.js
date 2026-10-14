@@ -2,7 +2,7 @@
 ;(() => {
   const q = new URLSearchParams(location.search)
   // a height cap for the dense layouts' screenshots
-  try { if (q.get('h')) localStorage.setItem('size', JSON.stringify({w: 300, h: Number(q.get('h'))})); else localStorage.removeItem('size') } catch (e) {}
+  try { if (q.get('level')) localStorage.setItem('size', JSON.stringify({w: 300, level: Number(q.get('level'))})); else localStorage.removeItem('size') } catch (e) {}
   const now = Date.now()
   const settings = {
     theme: q.get('theme') || 'dark', language: q.get('lang') || 'en', opacity: 96,

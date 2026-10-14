@@ -19,7 +19,8 @@ Windows, macOS and Linux. Free and open source (MIT).
 When you run Claude Code in several terminals (or under two accounts) you keep switching windows to see whether
 anything is done. cc-widget sits in a corner of the screen and turns orange when a session finishes its turn and
 waits for you. **Click a session** to mark it as seen and bring up the terminal or IDE window it runs in.
-Drag the widget anywhere, **resize it** by its edge (the width is kept; make it shorter and the list scrolls), click
+Drag the widget anywhere and **resize it** by its edge: the width and the layout you drag to are kept (full, compact,
+session chips, status dots — no scrolling) and the height follows the sessions as they come and go. Click
 the header for the details.
 
 | Details (click the header) | Settings (⚙) | Light theme |
