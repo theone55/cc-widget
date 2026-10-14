@@ -126,9 +126,15 @@ pub fn run(config_dir: &str) -> i32 {
 
 fn save_numbers(dir: &Path, data: &Value) {
     if let Some(rl) = data.get("rate_limits").filter(|r| r.is_object()) {
+        // every session of the account runs its statusline, an idle one with the numbers of its last answer (maybe
+        // a window that has already reset): keep the newer of what's in the file and what this session says
+        let old: Value = std::fs::read_to_string(paths::limits_file(dir))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or(json!({}));
         let file = json!({
-            "five_hour": rl.get("five_hour"),
-            "seven_day": rl.get("seven_day"),
+            "five_hour": newer(old.get("five_hour"), rl.get("five_hour")),
+            "seven_day": newer(old.get("seven_day"), rl.get("seven_day")),
             "updatedAt": now_ms(),
         });
         let _ = std::fs::write(paths::limits_file(dir), file.to_string());
@@ -137,6 +143,25 @@ fn save_numbers(dir: &Path, data: &Value) {
     if let (Some(path), Some(used)) = (paths::context_file(session), context_used(data)) {
         let file = json!({ "session_id": session, "used_pct": used, "timestamp": now_ms() / 1000 });
         let _ = std::fs::write(path, file.to_string());
+    }
+}
+
+/// Of two snapshots of one limit window: the later window (resets_at), and within the same window the higher use
+/// (usage only grows until the reset).
+fn newer(a: Option<&Value>, b: Option<&Value>) -> Value {
+    let reset = |v: &Value| v.get("resets_at").and_then(|r| r.as_f64()).unwrap_or(0.0);
+    let used = |v: &Value| v.get("used_percentage").and_then(|r| r.as_f64()).unwrap_or(0.0);
+    match (a.filter(|v| v.is_object()), b.filter(|v| v.is_object())) {
+        (Some(a), Some(b)) => {
+            if reset(b) > reset(a) || (reset(b) == reset(a) && used(b) >= used(a)) {
+                b.clone()
+            } else {
+                a.clone()
+            }
+        }
+        (Some(a), None) => a.clone(),
+        (None, Some(b)) => b.clone(),
+        (None, None) => Value::Null,
     }
 }
 
@@ -258,6 +283,23 @@ mod tests {
         assert_eq!(ctx["used_pct"], 25.0);
         assert_eq!(default_line(&data), "ctx 25% │ 5h 12% │ 7d 40%");
         let _ = std::fs::remove_file(ctx_path);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn an_idle_sessions_old_numbers_never_replace_newer_ones() {
+        let dir = temp_dir("newer");
+        let now_window = json!({ "rate_limits": { "five_hour": { "used_percentage": 8, "resets_at": 2000 } } });
+        let old_window = json!({ "rate_limits": { "five_hour": { "used_percentage": 60, "resets_at": 1000 } } });
+        save_numbers(&dir, &now_window);
+        save_numbers(&dir, &old_window);
+        let read = || serde_json::from_str::<Value>(&std::fs::read_to_string(paths::limits_file(&dir)).unwrap()).unwrap();
+        assert_eq!(read()["five_hour"]["used_percentage"], 8);
+        // the same window: the higher use wins whichever session writes last
+        save_numbers(&dir, &json!({ "rate_limits": { "five_hour": { "used_percentage": 5, "resets_at": 2000 } } }));
+        assert_eq!(read()["five_hour"]["used_percentage"], 8);
+        save_numbers(&dir, &json!({ "rate_limits": { "five_hour": { "used_percentage": 9, "resets_at": 2000 } } }));
+        assert_eq!(read()["five_hour"]["used_percentage"], 9);
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -20,7 +20,8 @@ const esc = (t) => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': 
 const folder = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || p
 
 // A session "waits" when its turn is over (idle) and you haven't clicked it since: the click is the "seen".
-const state = (s) => s.status === 'busy' ? 'busy'
+// "shell": the turn is over but a background command still runs (a build Claude waits for) — working, not waiting
+const state = (s) => s.status === 'busy' || s.status === 'shell' ? 'busy'
   : s.status === 'idle' ? ((seen[s.sessionId] || 0) >= s.since ? 'idle' : 'wait')
   : 'wait'                // anything else (a permission prompt…) needs you
 const ago = (ms) => {
@@ -111,7 +112,7 @@ function render() {
       ${S.showContext ? `<span class="ctxbar" title="${T.context} ${ctx ?? '?'}%${hint}">${ctx != null
         ? bar(ctx, th.contextWarn, th.contextFull) + `<span class="pct">${ctx}%</span>` : '<span class="muted">—</span>'}</span>` : ''}
     </div>
-    <div class="sub details">${esc(folder(s.cwd))}${s.kind === 'bg' ? ' · ' + T.bg : ''} · ${st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free} ${ago(s.since)}${hint}</div>`
+    <div class="sub details">${esc(folder(s.cwd))}${s.kind === 'bg' ? ' · ' + T.bg : ''} · ${s.status === 'shell' ? T.background : st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free} ${ago(s.since)}${hint}</div>`
   }).join('') : `<div class="empty">${T.noSessions}</div>`
 
   $('counter').innerHTML = !S.counter.enabled ? '' : Array.isArray(counter)
@@ -183,7 +184,9 @@ $('head').addEventListener('mouseup', async e => {
   await invoke('settings_set', {settings: S}).catch(() => {})
   render()
 })
-$('list').addEventListener('click', e => {
+// mousedown, not click: the list is redrawn while you hold the button, and a click whose row was replaced never fires
+$('list').addEventListener('mousedown', e => {
+  if (e.button !== 0) return
   const row = e.target.closest('.row')
   const s = row && sessions.find(x => x.sessionId === row.dataset.id)
   if (!s) return
@@ -347,8 +350,13 @@ async function pollSessions() {
   const ids = new Set(sessions.map(s => s.sessionId))
   for (const k of Object.keys(seen)) if (!ids.has(k)) delete seen[k]
   save('seen', seen)
+  // redraw only when something changed (the ages in the details tick by the minute)
+  const key = JSON.stringify([sessions, limits, Math.floor(Date.now() / 60000)])
+  if (key === lastPoll) return
+  lastPoll = key
   render()
 }
+let lastPoll = ''
 let counterTimer = null
 async function pollCounter() {
   clearTimeout(counterTimer)
