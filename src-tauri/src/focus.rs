@@ -4,20 +4,29 @@
 //! (IntelliJ: "statics_be – console_60" for a session in …/statics_be); without a match, the first one.
 //! Best effort: it finds the window, not a particular tab or tool window inside it.
 
-/// The process and its parents, nearest first (at most 12 steps; a parent loop can't hang it).
-fn ancestors(pid: u32) -> Vec<u32> {
+/// The process and its parents, nearest first (at most 12 steps; a parent loop can't hang it), with their executables.
+fn ancestors(pid: u32) -> Vec<(u32, Option<std::path::PathBuf>)> {
     let mut sys = sysinfo::System::new();
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-    let mut out = vec![];
+    let mut out: Vec<(u32, Option<std::path::PathBuf>)> = vec![];
     let mut cur = Some(sysinfo::Pid::from_u32(pid));
     while let Some(p) = cur {
-        if out.len() >= 12 || out.contains(&p.as_u32()) {
+        if out.len() >= 12 || out.iter().any(|(q, _)| *q == p.as_u32()) {
             break;
         }
-        out.push(p.as_u32());
-        cur = sys.process(p).and_then(|proc| proc.parent());
+        let proc = sys.process(p);
+        out.push((p.as_u32(), proc.and_then(|x| x.exe()).map(|e| e.to_path_buf())));
+        cur = proc.and_then(|x| x.parent());
     }
     out
+}
+
+/// The .app bundle an executable lives in ("/Applications/IntelliJ IDEA.app/Contents/MacOS/idea" → the .app).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn app_bundle(exe: &std::path::Path) -> Option<std::path::PathBuf> {
+    let s = exe.to_str()?;
+    let end = s.find(".app/Contents/MacOS/")?;
+    Some(std::path::PathBuf::from(&s[..end + 4]))
 }
 
 /// The folder names of the session's path, the deepest first ("E:\w\statics_be\api" → api, statics_be, w),
@@ -66,7 +75,7 @@ pub fn focus(pid: u32, cwd: &str) -> Result<(), String> {
         1
     }
 
-    for p in ancestors(pid) {
+    for (p, _) in ancestors(pid) {
         let mut search = Search { pid: p, found: vec![] };
         // SAFETY: `search` outlives the call; the callback only writes into it
         unsafe { EnumWindows(Some(each), &mut search as *mut Search as LPARAM) };
@@ -86,39 +95,47 @@ pub fn focus(pid: u32, cwd: &str) -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 pub fn focus(pid: u32, cwd: &str) -> Result<(), String> {
-    // the first ancestor that is an app System Events knows (Terminal, iTerm2, an IDE…) comes to the front, and its
-    // window naming the session's folder is raised
-    let names = folder_names(cwd);
-    for p in ancestors(pid) {
-        let raise = names
-            .iter()
-            .map(|n| {
-                let n = n.replace('\\', "").replace('"', "");
-                format!("try\n perform action \"AXRaise\" of (first window whose name contains \"{n}\")\n return\n end try\n")
-            })
-            .collect::<String>();
-        let script = format!(
-            "tell application \"System Events\"\n set p to first process whose unix id is {p}\n set frontmost of p to true\n tell p\n{raise} end tell\nend tell"
-        );
-        let ok = std::process::Command::new("osascript")
-            .args(["-e", &script])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
-        if ok {
-            return Ok(());
-        }
+    // The first ancestor inside an .app bundle (Terminal, iTerm2, an IDE…) is the app: `open` on its bundle brings the
+    // running instance to the front — no permission needed. Then its window naming the session's folder is raised via
+    // System Events, which needs Automation + Accessibility (macOS asks once); without them the app still comes up.
+    let (p, app) = ancestors(pid)
+        .into_iter()
+        .find_map(|(p, exe)| exe.as_deref().and_then(app_bundle).map(|app| (p, app)))
+        .ok_or("no app found")?;
+    let opened = std::process::Command::new("open")
+        .arg(&app)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    let raise = folder_names(cwd)
+        .iter()
+        .map(|n| {
+            let n = n.replace('\\', "").replace('"', "");
+            format!("try\n perform action \"AXRaise\" of (first window whose name contains \"{n}\")\n return\n end try\n")
+        })
+        .collect::<String>();
+    let script = format!(
+        "tell application \"System Events\"\n set p to first process whose unix id is {p}\n set frontmost of p to true\n tell p\n{raise} end tell\nend tell"
+    );
+    let raised = std::process::Command::new("osascript")
+        .args(["-e", &script])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if opened || raised {
+        Ok(())
+    } else {
+        Err("no window found".into())
     }
-    Err("no window found".into())
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
 pub fn focus(pid: u32, cwd: &str) -> Result<(), String> {
     // X11 with xdotool (or wmctrl): the process's windows, the one naming the folder first (Wayland can't raise others)
     use std::process::Command;
-    for p in ancestors(pid) {
+    for (p, _) in ancestors(pid) {
         let ids = Command::new("xdotool").args(["search", "--onlyvisible", "--pid", &p.to_string()]).output();
         let windows: Vec<(String, String)> = match ids {
             Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
@@ -169,6 +186,13 @@ mod tests {
         // no folder in any title: the first window
         assert_eq!(pick(&windows, "/opt/other"), Some(&1));
         assert_eq!(pick::<i32>(&[], "/x"), None);
+    }
+
+    #[test]
+    fn the_app_bundle_of_an_executable() {
+        let app = |s: &str| app_bundle(std::path::Path::new(s)).map(|p| p.to_string_lossy().into_owned());
+        assert_eq!(app("/Applications/IntelliJ IDEA.app/Contents/MacOS/idea").as_deref(), Some("/Applications/IntelliJ IDEA.app"));
+        assert_eq!(app("/bin/zsh"), None);
     }
 
     #[test]

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- without it macOS silently refuses the System Events call that raises a session's window (no prompt) -->
+  <key>NSAppleEventsUsageDescription</key>
+  <string>cc-widget brings the window of the Claude Code session you click to the front.</string>
+</dict>
+</plist>
