@@ -84,14 +84,15 @@ function render() {
 
   // limits: one block per account (a limit belongs to the account; every session of it spends the same one)
   const th = S.thresholds
+  // a window Claude Code didn't send (nothing used in it yet) or whose reset time has passed = 0%, not a gap
+  const fresh = (b) => b && b.used_percentage != null && !(b.resets_at && b.resets_at * 1000 < Date.now())
   const lim = (label, b) => {
-    if (!b || b.used_percentage == null) return ''
-    const p = Math.round(b.used_percentage)
+    const p = fresh(b) ? Math.round(b.used_percentage) : 0
     return `<span class="lbl">${label}</span>${bar(p, th.limitWarn, th.limitFull)}<span class="pct">${p}%</span>`
   }
   $('limits').innerHTML = !S.showLimits ? '' : limits.length ? limits.map(l => {
-    const resets = [l.five_hour?.resets_at && `${T.h5} ${T.in} ${left(l.five_hour.resets_at)}`,
-                    l.seven_day?.resets_at && `${T.d7} ${T.in} ${left(l.seven_day.resets_at)}`].filter(Boolean).join(' · ')
+    const resets = [fresh(l.five_hour) && l.five_hour.resets_at && `${T.h5} ${T.in} ${left(l.five_hour.resets_at)}`,
+                    fresh(l.seven_day) && l.seven_day.resets_at && `${T.d7} ${T.in} ${left(l.seven_day.resets_at)}`].filter(Boolean).join(' · ')
     return `<div class="lim"><span class="tag" data-acc="${l.accountIndex}" title="${esc(l.account)}">${esc(l.account)}</span>
       ${lim(T.h5, l.five_hour)}${lim(T.d7, l.seven_day)}</div>
       ${resets ? `<div class="resets details">${T.resets}: ${resets}</div>` : ''}`
