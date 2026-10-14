@@ -68,7 +68,8 @@ Everything is in ⚙:
 - **Accounts:** a label and a config folder each (several accounts via `CLAUDE_CONFIG_DIR`).
 - **Counter (optional):** a few numbers from your own server in the header, for example a site's visitors.
   cc-widget sends `GET <url>`, gets JSON back and reads the fields you list as dot paths, optionally named (`today=visitors.today`). An optional
-  token is kept in the system keychain. With a *pass URL*, the token is first swapped there for a short-lived pass
+  token is kept in the system keychain; it is fetched every N minutes (5 by default). With a *pass URL*, the token is
+  first swapped there for a short-lived pass, reused for 50 minutes
   (`{"pass": "…"}`).
 
 Settings are kept in `settings.json` in the app's config folder:

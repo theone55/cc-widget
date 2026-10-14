@@ -231,6 +231,7 @@ async function openSettings() {
     <div class="hint">${T.url}</div><input class="wide" type="text" name="counterUrl" value="${esc(S.counter.url)}" placeholder="https://…">
     <div class="hint">${T.passUrl}</div><input class="wide" type="text" name="counterPassUrl" value="${esc(S.counter.passUrl)}">
     <div class="hint">${T.fields}</div><input class="wide" type="text" name="counterFields" value="${esc(S.counter.fields.join(', '))}" placeholder="visitors.today, visitors.days7">
+    <label><span>${T.every}</span><input type="number" min="1" max="1440" name="counterEvery" value="${S.counter.every || 5}"></label>
     <div class="hint">${T.token}: ${hasToken ? T.tokenSaved : T.tokenNone}</div><input class="wide" type="password" name="counterToken" autocomplete="off">
     <div class="actions"><button type="button" id="cancel">${T.cancel}</button><button type="submit" class="primary">${T.save}</button></div>`
   drawAccounts(S.accounts.map(a => ({...a})))
@@ -315,6 +316,7 @@ $('settings').addEventListener('submit', async e => {
       url: v('counterUrl').value.trim(),
       passUrl: v('counterPassUrl').value.trim(),
       fields: v('counterFields').value.split(',').map(s => s.trim()).filter(Boolean),
+      every: Math.min(1440, Math.max(1, Number(v('counterEvery').value) || 5)),
     },
   }
   await invoke('settings_set', {settings: next})
