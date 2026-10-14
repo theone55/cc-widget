@@ -1,0 +1,130 @@
+/* colors come from the settings as --ok / --warn / --full / --accent (set on :root by widget.js) */
+:root {
+  --ok: #4ade80;
+  --warn: #fb923c;
+  --full: #f87171;
+  --accent: #a78bfa;
+  --alpha: 0.94;
+  --bg: rgba(24, 24, 30, var(--alpha));
+  --border: #3a3a48;
+  --track: rgba(255, 255, 255, 0.12);
+  --hover: rgba(255, 255, 255, 0.06);
+  --field: #111116;
+  --text: #e8e8ee;
+  --muted: #9a9aaa;
+  --idle: #6b6b7b;
+}
+:root.light {
+  --bg: rgba(250, 250, 252, var(--alpha));
+  --border: #d4d4de;
+  --track: rgba(0, 0, 0, 0.1);
+  --hover: rgba(0, 0, 0, 0.05);
+  --field: #ffffff;
+  --text: #1c1c24;
+  --muted: #6b6b7b;
+  --idle: #a0a0ad;
+}
+
+html, body { margin: 0; background: transparent; color: var(--text); font: 12px system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden; user-select: none; }
+#box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-sizing: border-box; padding: 6px 8px;
+  height: 100vh; display: flex; flex-direction: column; }
+#view { flex: 1; min-height: 0; overflow: hidden; }
+
+/* denser layouts when the window is shorter than everything (widget.js fit()) */
+body.dense1 .details, body.dense1 .resets { display: none !important; }
+body.dense1 .row { min-height: 17px; margin: 1px 0; }
+body.dense1 .section { margin-top: 3px; padding-top: 3px; }
+body.dense1 .lim { height: 15px; }
+body.dense2 #list { display: flex; flex-wrap: wrap; gap: 3px; }
+body.dense2 .row { min-height: 16px; margin: 0; padding: 0 5px; max-width: calc(50% - 2px); box-sizing: border-box; }
+body.dense2 .row .name { max-width: 80px; }
+body.dense2 .row .ctxbar { width: auto; }
+body.dense2 .row .ctxbar .bar, body.dense2 .row .letter { display: none; }
+body.dense2 .lim .lbl { display: none; }
+body.dense3 #limits { display: none; }
+body.dense3 .row { padding: 0 3px; gap: 0; }
+body.dense3 .row .name, body.dense3 .row .ctxbar { display: none; }
+body.dense3 .row .dot { width: 10px; height: 10px; }
+
+/* narrow windows: numbers off, bars stay */
+@media (max-width: 260px) {
+  .pct, .counter-head { display: none; }
+  .tag { width: auto; max-width: 44px; }
+  .row .ctxbar { width: 40px; }
+}
+@media (max-width: 230px) {
+  .lim .lbl { display: none; }
+  .letter { display: none; }
+}
+#head { flex: none; }
+#box.waiting { border-color: var(--warn); }
+
+/* the header drags the window; a click (not a drag) toggles the details */
+#head { display: flex; align-items: center; gap: 8px; height: 22px; cursor: pointer; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+.dot.busy { background: var(--ok); animation: pulse 1.2s ease-in-out infinite; }
+.dot.wait { background: var(--warn); }
+.dot.idle { background: var(--idle); }
+@keyframes pulse { 50% { opacity: 0.35; } }
+.count { font-weight: 600; }
+.muted { color: var(--muted); }
+.right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.counter-head { color: var(--muted); white-space: nowrap; }
+.gear { border: none; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1; }
+.gear:hover { color: var(--text); }
+
+/* a filled bar: the track is always visible, the fill is the used part (its width is set from JS: the CSP drops style="") */
+.bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; flex: 1; min-width: 30px; }
+.bar i { display: block; height: 100%; width: 0; background: var(--ok); border-radius: 3px; transition: width 0.3s; }
+.bar i.hot { background: var(--warn); }
+.bar i.full { background: var(--full); }
+.pct { width: 30px; text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+
+.section { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 5px; }
+.section:empty { display: none !important; }
+.lim { display: flex; align-items: center; gap: 6px; height: 18px; }
+.lim .lbl { width: 16px; flex: none; color: var(--muted); }
+.tag { font-size: 10px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted);
+  flex: none; width: 52px; text-align: center; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.resets { color: var(--muted); font-size: 10px; margin: 0 0 3px 58px; }
+
+.row { display: flex; align-items: center; gap: 6px; min-height: 20px; border-radius: 5px; cursor: pointer; padding: 0 2px; }
+.row:hover { background: var(--hover); }
+.row.acc { background: color-mix(in srgb, var(--acc) 17%, transparent); margin: 2px 0; padding: 0 5px; }
+.row.acc:hover { background: color-mix(in srgb, var(--acc) 27%, transparent); }
+.row .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row.wait .name { color: var(--warn); font-weight: 600; }
+.row .ctxbar { width: 64px; flex: none; display: flex; align-items: center; gap: 4px; }
+.letter { font-size: 10px; flex: none; min-width: 12px; text-align: center; color: var(--muted); }
+.sub { color: var(--muted); font-size: 10px; margin: -2px 0 3px 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.empty { color: var(--muted); padding: 2px; }
+.details { display: none; }
+body.open .details { display: block; }
+body.open .sub.details { display: block; }
+
+/* settings */
+#settings { flex: 1; min-height: 0; overflow-y: auto; padding-right: 2px; }
+#settings input[type=checkbox], #settings input[type=range] { accent-color: var(--accent); }
+#settings h4 { margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+#settings label { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+#settings label > span:first-child { flex: 1; }
+#settings input[type=text], #settings input[type=password], #settings input[type=number], #settings select {
+  background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 2px 5px;
+  font: 12px system-ui, sans-serif; box-sizing: border-box; min-width: 0; }
+#settings input[type=number] { width: 52px; }
+#settings input[type=color] { width: 28px; height: 20px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: none; }
+#settings .wide { width: 100%; }
+#settings .acc { display: flex; gap: 4px; align-items: center; margin: 3px 0; }
+#settings .acc input[name=label] { width: 70px; }
+#settings .acc input[name=dir] { flex: 1; }
+#settings button { background: var(--field); color: var(--text); border: 1px solid var(--border); border-radius: 5px;
+  padding: 2px 8px; font: 12px system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
+#settings button:hover { border-color: var(--accent); }
+#settings button.primary { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 600; }
+#settings .hint { color: var(--muted); font-size: 10px; margin: 1px 0 4px; }
+#settings .actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; position: sticky; bottom: 0;
+  background: var(--bg); padding: 4px 0; }
+#settings .st-connected { color: var(--ok); }
+#settings .st-other { color: var(--muted); }
+::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }

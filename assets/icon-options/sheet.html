@@ -1,0 +1,53 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;padding:28px;background:#14121c;font-family:"Segoe UI",system-ui,sans-serif;color:#ddd}
+.row{display:flex;gap:26px}
+.cell{width:230px;text-align:center}
+.tile{width:230px;height:230px;border-radius:22px;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.dark{background:#1c1a26}.light{background:#f3f1f8;margin-top:14px}
+.small{display:flex;gap:14px;justify-content:center;align-items:center;margin-top:12px}
+.small span{display:inline-flex;width:40px;height:40px;align-items:center;justify-content:center;border-radius:8px;background:#2a2735}
+.num{font-size:22px;font-weight:700;color:#fff}.cap{font-size:13px;color:#a9a8bd;margin-top:4px;line-height:1.35}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="100" y2="0"><stop offset="0" stop-color="#6d28d9"/><stop offset=".55" stop-color="#b03fb8"/><stop offset="1" stop-color="#f0607a"/></linearGradient>
+</defs></svg>
+<div class="row" id="row"></div>
+<script>
+const S='fill="none" stroke="url(#g)" stroke-linecap="round" stroke-linejoin="round"';
+const D='fill="url(#g)"';
+const icons=[
+ ['Орбиты и сессии','Как у JFSecure: орбиты, в центре — терминал с курсором (сессии Claude Code)',
+ `<ellipse cx="50" cy="50" rx="42" ry="17" ${S} stroke-width="5" transform="rotate(-30 50 50)"/>
+  <ellipse cx="50" cy="50" rx="42" ry="17" ${S} stroke-width="5" transform="rotate(30 50 50)"/>
+  <circle cx="86" cy="29" r="5.5" ${D}/><circle cx="14" cy="71" r="5.5" ${D}/>
+  <rect x="31" y="35" width="38" height="30" rx="6" ${S} stroke-width="5"/>
+  <path d="M40 45l6 5-6 5M50 56h9" ${S} stroke-width="4.5"/>`],
+ ['Шкала лимита','Спидометр: дуга заполнения и стрелка — «сколько лимита осталось»',
+ `<path d="M14 66a36 36 0 0 1 72 0" ${S} stroke-width="7" opacity=".25"/>
+  <path d="M14 66a36 36 0 0 1 58-28" ${S} stroke-width="7"/>
+  <circle cx="72" cy="38" r="6" ${D}/>
+  <path d="M50 66L66 46" ${S} stroke-width="6"/><circle cx="50" cy="66" r="7" ${D}/>
+  <path d="M30 82h40" ${S} stroke-width="5"/>`],
+ ['Окно с полосками','Сам виджет: окно, три строки — точка статуса и полоска заполнения',
+ `<rect x="12" y="16" width="76" height="68" rx="14" ${S} stroke-width="5"/>
+  <circle cx="27" cy="36" r="5" ${D}/><path d="M38 36h36" ${S} stroke-width="6"/>
+  <circle cx="27" cy="51" r="5" ${D}/><path d="M38 51h20" ${S} stroke-width="6"/>
+  <circle cx="27" cy="66" r="5" ${D}/><path d="M38 66h30" ${S} stroke-width="6"/>`],
+ ['Кольцо контекста','Кольцо прогресса с точкой на конце, внутри — «ждёт ответа» (пузырь с точками)',
+ `<circle cx="50" cy="50" r="38" ${S} stroke-width="6" opacity=".25"/>
+  <path d="M50 12a38 38 0 1 1-36.1 26.3" ${S} stroke-width="6"/>
+  <circle cx="13.9" cy="38.3" r="6" ${D}/>
+  <path d="M33 40h34a6 6 0 0 1 6 6v12a6 6 0 0 1-6 6H46l-9 7v-7h-4a6 6 0 0 1-6-6V46a6 6 0 0 1 6-6z" ${S} stroke-width="4.5"/>
+  <circle cx="40" cy="52" r="3" ${D}/><circle cx="50" cy="52" r="3" ${D}/><circle cx="60" cy="52" r="3" ${D}/>`],
+ ['Пульс','Импульс активности сквозь кольцо: сессии живые, виджет «слушает»',
+ `<circle cx="50" cy="50" r="38" ${S} stroke-width="5.5"/>
+  <path d="M14 52h18l7-17 10 32 9-24 6 9h22" ${S} stroke-width="6"/>
+  <circle cx="86" cy="52" r="5.5" ${D}/><circle cx="50" cy="12" r="5.5" ${D}/>`],
+];
+const row=document.getElementById('row');
+icons.forEach(([t,c,body],i)=>{
+ const svg=(s)=>`<svg width="${s}" height="${s}" viewBox="0 0 100 100">${body}</svg>`;
+ row.insertAdjacentHTML('beforeend',`<div class="cell"><div class="tile dark">${svg(170)}</div>
+ <div class="num">${i+1}. ${t}</div><div class="cap">${c}</div>
+ <div class="small"><span>${svg(32)}</span><span style="width:24px;height:24px">${svg(16)}</span><span style="background:#f3f1f8">${svg(32)}</span></div></div>`)});
+</script></body></html>

@@ -1,0 +1,47 @@
+# A tag v* builds the installers for Windows, macOS (universal) and Linux and publishes them as a GitHub release.
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: ''
+          - os: macos-latest
+            args: '--target universal-apple-darwin'
+          - os: ubuntu-22.04
+            args: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - name: Linux packages
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # the lockfile must list every OS's native @tauri-apps/cli package: regenerate it WITHOUT node_modules (npm bug 4828)
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: cc-widget ${{ github.ref_name }}
+          releaseBody: 'Downloads below. The builds are not signed yet. **macOS:** after moving cc-widget to Applications, run once in Terminal: `xattr -cr /Applications/cc-widget.app`. **Windows:** SmartScreen → More info → Run anyway. Then open ⚙ and press Connect next to each account (see the README).'
+          releaseDraft: false
+          args: ${{ matrix.args }}

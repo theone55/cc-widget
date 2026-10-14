@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 100 100">
+  <!-- cc-widget: a limit gauge, in the owner's app style (line art, violet → coral, transparent) -->
+  <defs>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="100" y2="0">
+      <stop offset="0" stop-color="#6d28d9"/><stop offset=".55" stop-color="#b03fb8"/><stop offset="1" stop-color="#f0607a"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#g)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 64a38 38 0 0 1 76 0" stroke-width="8" opacity=".25"/>
+    <path d="M12 64a38 38 0 0 1 61.2-30.1" stroke-width="8"/>
+    <path d="M50 64L67 43" stroke-width="7"/>
+    <path d="M28 82h44" stroke-width="6.5"/>
+  </g>
+  <circle cx="73.2" cy="33.9" r="7" fill="url(#g)"/>
+  <circle cx="50" cy="64" r="8.5" fill="url(#g)"/>
+</svg>
