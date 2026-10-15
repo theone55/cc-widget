@@ -2,9 +2,11 @@
 //! terminal / IDE) to the first process that owns visible windows, and put the right one in front. An IDE has one
 //! window per project, so among that process's windows the one whose title names the session's folder wins
 //! (IntelliJ: "statics_be – console_60" for a session in …/statics_be); without a match, the first one.
-//! Best effort: it finds the window, not a particular tab or tool window inside it.
+//! Best effort: it finds the window, not a particular tab or tool window inside it — except Terminal and iTerm2 on
+//! macOS, where the tab is found by the session's tty.
 
 /// The process and its parents, nearest first (at most 12 steps; a parent loop can't hang it), with their executables.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 fn ancestors(pid: u32) -> Vec<(u32, Option<std::path::PathBuf>)> {
     let mut sys = sysinfo::System::new();
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
@@ -93,15 +95,72 @@ pub fn focus(pid: u32, cwd: &str) -> Result<(), String> {
     Err("no window found".into())
 }
 
+/// One `ps` column of a process ("" columns and dead processes → None). Unlike sysinfo, ps also reads processes of
+/// other users: Terminal and iTerm2 start the shell through /usr/bin/login, which runs as root, and sysinfo gave it
+/// no parent — the walk up stopped there and the click did nothing.
+#[cfg(target_os = "macos")]
+fn ps(pid: u32, field: &str) -> Option<String> {
+    let out = std::process::Command::new("ps")
+        .args(["-o", &format!("{field}="), "-p", &pid.to_string()])
+        .output()
+        .ok()?;
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!s.is_empty()).then_some(s)
+}
+
+/// `ancestors` for macOS, through ps (comm = the executable's full path for apps).
+#[cfg(target_os = "macos")]
+fn mac_ancestors(pid: u32) -> Vec<(u32, Option<std::path::PathBuf>)> {
+    let mut out: Vec<(u32, Option<std::path::PathBuf>)> = vec![];
+    let mut cur = pid;
+    while cur > 1 && out.len() < 12 && !out.iter().any(|(q, _)| *q == cur) {
+        out.push((cur, ps(cur, "comm").map(std::path::PathBuf::from)));
+        match ps(cur, "ppid").and_then(|s| s.parse().ok()) {
+            Some(parent) => cur = parent,
+            None => break,
+        }
+    }
+    out
+}
+
+/// AppleScript that selects the tab running on `tty` in Terminal or iTerm2 and brings its window up (prints "ok" when
+/// it found it); None for other apps.
+#[cfg(target_os = "macos")]
+fn tab_script(app: &std::path::Path, tty: &str) -> Option<String> {
+    match app.file_name()?.to_str()? {
+        "Terminal.app" => Some(format!(
+            "tell application id \"com.apple.Terminal\"\n repeat with w in windows\n  repeat with t in tabs of w\n   if tty of t is \"{tty}\" then\n    set miniaturized of w to false\n    set selected of t to true\n    set index of w to 1\n    activate\n    return \"ok\"\n   end if\n  end repeat\n end repeat\nend tell"
+        )),
+        "iTerm.app" => Some(format!(
+            "tell application id \"com.googlecode.iterm2\"\n repeat with w in windows\n  repeat with t in tabs of w\n   repeat with s in sessions of t\n    if tty of s is \"{tty}\" then\n     select w\n     tell t to select\n     tell s to select\n     activate\n     return \"ok\"\n    end if\n   end repeat\n  end repeat\n end repeat\nend tell"
+        )),
+        _ => None,
+    }
+}
+
 #[cfg(target_os = "macos")]
 pub fn focus(pid: u32, cwd: &str) -> Result<(), String> {
-    // The first ancestor inside an .app bundle (Terminal, iTerm2, an IDE…) is the app: `open` on its bundle brings the
-    // running instance to the front — no permission needed. Then its window naming the session's folder is raised via
-    // System Events, which needs Automation + Accessibility (macOS asks once); without them the app still comes up.
-    let (p, app) = ancestors(pid)
+    // The first ancestor inside an .app bundle (Terminal, iTerm2, an IDE…) is the app.
+    let (p, app) = mac_ancestors(pid)
         .into_iter()
         .find_map(|(p, exe)| exe.as_deref().and_then(app_bundle).map(|app| (p, app)))
         .ok_or("no app found")?;
+    // Terminal / iTerm2: the exact tab, found by the session's terminal (ttys001) — asks for Automation once
+    let tty = ps(pid, "tty").filter(|t| t.starts_with("ttys") && t.chars().all(|c| c.is_ascii_alphanumeric()));
+    if let Some(script) = tty.and_then(|t| tab_script(&app, &format!("/dev/{t}"))) {
+        let found = std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .stderr(std::process::Stdio::null())
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "ok")
+            .unwrap_or(false);
+        if found {
+            return Ok(());
+        }
+    }
+    // Otherwise (an IDE, or the tab wasn't found): `open` on the bundle brings the running instance to the front — no
+    // permission needed. Then its window naming the session's folder is raised via System Events, which needs
+    // Automation + Accessibility (macOS asks once); without them the app still comes up.
     let opened = std::process::Command::new("open")
         .arg(&app)
         .status()
