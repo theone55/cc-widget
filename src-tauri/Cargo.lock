@@ -478,7 +478,7 @@ dependencies = [
 
 [[package]]
 name = "cc-widget"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "keyring",
  "reqwest 0.12.28",

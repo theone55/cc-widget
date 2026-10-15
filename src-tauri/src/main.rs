@@ -11,6 +11,7 @@ mod paths;
 mod sessions;
 mod settings;
 mod statusline;
+mod system;
 mod tray;
 
 use settings::Settings;
@@ -21,6 +22,7 @@ use tauri::Manager;
 struct AppState {
     config_dir: PathBuf,
     settings: Mutex<Settings>,
+    system: system::Shared,
 }
 
 fn current(state: &tauri::State<AppState>) -> Settings {
@@ -33,10 +35,30 @@ fn settings_get(state: tauri::State<AppState>) -> Settings {
 }
 
 #[tauri::command]
-fn settings_set(state: tauri::State<AppState>, settings: Settings) -> Result<(), String> {
+fn settings_set(state: tauri::State<AppState>, mut settings: Settings) -> Result<(), String> {
+    let mut cur = state.settings.lock().unwrap();
+    // the window's place is saved by its own commands; the page's copy of it may be older
+    settings.pos = cur.pos;
+    settings.size = cur.size;
     settings::save(&state.config_dir, &settings)?;
-    *state.settings.lock().unwrap() = settings;
+    *cur = settings;
     Ok(())
+}
+
+/// The window was moved: remember where (saved right away, so a shutdown can't lose it).
+#[tauri::command]
+fn pos_set(state: tauri::State<AppState>, x: i32, y: i32) -> Result<(), String> {
+    let mut cur = state.settings.lock().unwrap();
+    cur.pos = Some(settings::Pos { x, y });
+    settings::save(&state.config_dir, &cur)
+}
+
+/// The window was resized by you (or back to automatic: None).
+#[tauri::command]
+fn size_set(state: tauri::State<AppState>, size: Option<settings::Size>) -> Result<(), String> {
+    let mut cur = state.settings.lock().unwrap();
+    cur.size = size;
+    settings::save(&state.config_dir, &cur)
 }
 
 /// Claude Code config folders found on this machine (for "Find accounts" in the settings).
@@ -92,6 +114,16 @@ async fn focus_session(pid: u32, cwd: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || focus::focus(pid, &cwd)).await.map_err(|e| e.to_string())?
 }
 
+/// The "System" section's numbers (only while it is on: the page asks every 2 s).
+#[tauri::command]
+async fn system_stats(state: tauri::State<'_, AppState>) -> Result<system::Stats, String> {
+    let panel = current(&state).system;
+    if !panel.enabled {
+        return Err("off".into());
+    }
+    Ok(state.system.lock().unwrap().sample(panel.gpu))
+}
+
 #[tauri::command]
 fn counter_has_token() -> bool {
     counter::token().is_some()
@@ -130,13 +162,15 @@ fn main() {
             let settings = settings::load(&config_dir);
             let russian = settings.language == "ru"
                 || (settings.language == "auto" && std::env::var("LANG").is_ok_and(|l| l.starts_with("ru")));
-            app.manage(AppState { config_dir, settings: Mutex::new(settings) });
+            app.manage(AppState { config_dir, settings: Mutex::new(settings), system: Mutex::new(system::Sampler::new()) });
             tray::create(app.handle(), russian)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             settings_get,
             settings_set,
+            pos_set,
+            size_set,
             detect_accounts,
             sessions,
             limits,
@@ -147,6 +181,7 @@ fn main() {
             counter_set_token,
             counter_has_token,
             focus_session,
+            system_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running cc-widget");

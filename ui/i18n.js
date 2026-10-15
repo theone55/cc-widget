@@ -24,6 +24,9 @@ window.I18N = {
     counter: 'Counter (optional)', counterHint: 'Numbers from your own server in the header: GET the URL → JSON, fields are dot paths, optionally named (today=visitors.today). The token stays in the system keychain.',
     enabled: 'on', label: 'Label', url: 'URL', passUrl: 'Pass URL (optional)', fields: 'Fields, comma-separated', every: 'Every, minutes', token: 'Token',
     tokenSaved: 'saved — type a new one to replace, a space to forget', tokenNone: 'none',
+    system: 'System', sysOn: 'show CPU, memory, temperature', sysThreads: 'each CPU core', sysGpu: 'graphics card (NVIDIA)',
+    sysHint: 'Temperature is shown when the system reports it (Windows usually tells only an app run as administrator; an NVIDIA card always).',
+    gb: 'GB', lastMin: '2 min', core: 'Core', threads: 'threads', cores: (n) => n + (n === 1 ? ' core' : ' cores'),
     save: 'Save', cancel: 'Cancel', noConnection: 'no connection',
   },
   ru: {
@@ -50,6 +53,10 @@ window.I18N = {
     counter: 'Счётчик (необязательно)', counterHint: 'Числа с вашего сервера в заголовке: GET по адресу → JSON, поля — пути через точку, можно с подписью (сегодня=visitors.today). Токен хранится в системном хранилище ключей.',
     enabled: 'вкл', label: 'Подпись', url: 'Адрес', passUrl: 'Адрес пропуска (необязательно)', fields: 'Поля через запятую', every: 'Каждые, минут', token: 'Токен',
     tokenSaved: 'сохранён — введите новый, чтобы заменить, пробел — забыть', tokenNone: 'нет',
+    system: 'Система', sysOn: 'показывать процессор, память, температуру', sysThreads: 'каждое ядро процессора', sysGpu: 'видеокарта (NVIDIA)',
+    sysHint: 'Температура — если система её отдаёт (Windows обычно только программе от администратора; видеокарта NVIDIA — всегда).',
+    gb: 'ГБ', lastMin: '2 мин', core: 'Ядро', threads: 'потоки',
+    cores: (n) => n + (n % 10 === 1 && n % 100 !== 11 ? ' ядро' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? ' ядра' : ' ядер'),
     save: 'Сохранить', cancel: 'Отмена', noConnection: 'нет связи',
   },
 }

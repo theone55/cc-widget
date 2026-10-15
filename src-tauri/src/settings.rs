@@ -69,6 +69,37 @@ pub struct Counter {
     pub every: u32,
 }
 
+/// Where the window is (physical pixels of the desktop).
+#[derive(Serialize, Deserialize, Clone, Copy)]
+pub struct Pos {
+    pub x: i32,
+    pub y: i32,
+}
+
+/// The width and layout you dragged the window to (logical pixels; level = how dense, 0..3).
+#[derive(Serialize, Deserialize, Clone, Copy)]
+pub struct Size {
+    pub w: f64,
+    pub level: u8,
+}
+
+/// The optional "System" section: CPU (each thread), memory, temperatures and an NVIDIA card's load.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SystemPanel {
+    pub enabled: bool,
+    /// a tile per CPU core instead of one CPU bar
+    pub threads: bool,
+    /// the graphics card (NVIDIA, through nvidia-smi)
+    pub gpu: bool,
+}
+
+impl Default for SystemPanel {
+    fn default() -> Self {
+        SystemPanel { enabled: false, threads: true, gpu: true }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -88,6 +119,12 @@ pub struct Settings {
     /// the details (folder, time, resets) open
     pub expanded: bool,
     pub counter: Counter,
+    pub system: SystemPanel,
+    /// the window's place and size, saved here on every change (they used to live in the webview's localStorage,
+    /// which is written to disk lazily: a shutdown lost them)
+    pub pos: Option<Pos>,
+    /// None = the automatic size
+    pub size: Option<Size>,
 }
 
 impl Default for Settings {
@@ -110,6 +147,9 @@ impl Default for Settings {
             show_background: true,
             expanded: false,
             counter: Counter { every: 5, ..Counter::default() },
+            system: SystemPanel::default(),
+            pos: None,
+            size: None,
         }
     }
 }

@@ -42,7 +42,9 @@ body.dense2 .row .name { max-width: 80px; }
 body.dense2 .row .ctxbar { width: auto; }
 body.dense2 .row .ctxbar .bar, body.dense2 .row .letter { display: none; }
 body.dense2 .lim .lbl { display: none; }
-body.dense3 #limits { display: none; }
+body.dense3 #limits, body.dense3 #system { display: none; }
+body.dense1 .scard { height: 50px; } body.dense1 .scard .ssub { display: none; } body.dense1 .cores { height: 14px; }
+body.dense2 .cores { display: none; }
 body.dense3 .row { padding: 0 3px; gap: 0; }
 body.dense3 .row .name, body.dense3 .row .ctxbar { display: none; }
 body.dense3 .row .dot { width: 10px; height: 10px; }
@@ -63,10 +65,12 @@ body.dense3 .row .dot { width: 10px; height: 10px; }
 /* the header drags the window; a click (not a drag) toggles the details */
 #head { display: flex; align-items: center; gap: 8px; height: 22px; cursor: pointer; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
-.dot.busy { background: var(--ok); animation: pulse 1.2s ease-in-out infinite; }
+.dot.busy { background: var(--ok); animation: pulse 1.6s steps(2, jump-none) infinite; }
 .dot.wait { background: var(--warn); }
 .dot.idle { background: var(--idle); }
-@keyframes pulse { 50% { opacity: 0.35; } }
+/* two steps, not a smooth fade: a transparent window is repainted whole on every animation frame, and a smooth
+   pulse cost a fifth of a CPU core on Windows */
+@keyframes pulse { 50% { opacity: 0.4; } }
 .count { font-weight: 600; }
 .muted { color: var(--muted); }
 .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -88,6 +92,38 @@ body.dense3 .row .dot { width: 10px; height: 10px; }
 .tag { font-size: 10px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted);
   flex: none; width: 52px; text-align: center; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .resets { color: var(--muted); font-size: 10px; margin: 0 0 3px 58px; }
+
+/* the System section: three cards (CPU, RAM, GPU) — a fill from the bottom = the load now, a line = the last 2 minutes;
+   under them a column per core made of its threads, each with a glowing cap */
+.scards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.scards.two { grid-template-columns: repeat(2, 1fr); }
+.scard { --c: var(--accent); position: relative; height: 70px; border-radius: 8px; overflow: hidden; background: var(--track);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 24%, transparent); }
+.scard .sfill { position: absolute; left: 0; right: 0; bottom: 0; height: 3%;
+  background: linear-gradient(to top, color-mix(in srgb, var(--accent) 50%, transparent), color-mix(in srgb, var(--c) 42%, transparent)); }
+.scard svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.scard polyline { fill: none; stroke: var(--c); stroke-width: 1.6; stroke-linejoin: round; }
+.scard .shd { position: absolute; top: 4px; left: 6px; right: 5px; display: flex; justify-content: space-between; align-items: center;
+  font-size: 9px; color: var(--muted); letter-spacing: 0.06em; font-weight: 700; white-space: nowrap; }
+.scard .sval { position: absolute; top: 16px; left: 6px; font-size: 17px; font-weight: 750; font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55); }
+.scard .sval small { font-size: 10px; font-weight: 500; color: var(--muted); }
+.scard .ssub { position: absolute; bottom: 4px; left: 6px; right: 5px; font-size: 9px; color: var(--text); opacity: 0.75;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 4px rgba(0, 0, 0, 0.8); }
+:root.light .scard .sval, :root.light .scard .ssub { text-shadow: 0 0 4px rgba(255, 255, 255, 0.9); }
+.temp { flex: none; font-size: 9px; font-weight: 700; padding: 0 4px; border-radius: 7px; line-height: 13px; letter-spacing: 0;
+  font-variant-numeric: tabular-nums; color: var(--ok); background: color-mix(in srgb, var(--ok) 18%, transparent); }
+.temp.hot { color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, transparent); }
+.temp.full { color: var(--full); background: color-mix(in srgb, var(--full) 20%, transparent); }
+.cores { display: grid; gap: 3px; margin: 5px 0 2px; height: 22px; }
+.core { display: flex; gap: 1px; align-items: flex-end; padding: 1px; border-radius: 3px; background: var(--track); }
+.core i { flex: 1; height: 5%; border-radius: 1.5px 1.5px 0 0;
+  background: linear-gradient(to top, color-mix(in srgb, var(--accent) 75%, transparent), color-mix(in srgb, var(--ok) 80%, transparent));
+  border-top: 1.5px solid var(--ok); box-shadow: 0 -1px 4px color-mix(in srgb, var(--ok) 55%, transparent); }
+.core i.hot { background: linear-gradient(to top, color-mix(in srgb, var(--accent) 75%, transparent), var(--warn)); border-top-color: var(--warn);
+  box-shadow: 0 -1px 4px color-mix(in srgb, var(--warn) 55%, transparent); }
+.core i.full { background: linear-gradient(to top, var(--warn), var(--full)); border-top-color: var(--full);
+  box-shadow: 0 -1px 4px color-mix(in srgb, var(--full) 55%, transparent); }
 
 .row { display: flex; align-items: center; gap: 6px; min-height: 20px; border-radius: 5px; cursor: pointer; padding: 0 2px; }
 .row:hover { background: var(--hover); }
