@@ -135,11 +135,10 @@ const tempLevel = (c) => c >= 80 ? 'full' : c >= 62 ? 'hot' : ''
 const temp = (c) => c == null ? '' : `<span class="temp ${tempLevel(c)}" title="°C">${Math.round(c)}°</span>`
 const gb = (b) => (b / 1073741824).toFixed(b >= 10 * 1073741824 ? 0 : 1)
 const SYS_COLORS = {cpu: 'var(--accent)', ram: '#fb923c', gpu: 'var(--ok)'}
-// the last 2 minutes as a line in a 100×100 box; `top` = the value at the card's top
+// the last 2 minutes as a line in a 100×100 box; `top` = the value at the card's top (always 100%: the fill and the
+// line must match the number — a scale that zoomed in on a quiet machine made 30% look nearly full)
 // newest on the right edge, like Task Manager: a short history starts part-way in
 const histLine = (h, top) => h.map((v, i) => `${((i + 60 - h.length) * 100 / 59).toFixed(1)},${(100 - Math.min(v, top) / top * 90).toFixed(1)}`).join(' ')
-// CPU and GPU zoom in on a quiet machine (never past 0..25%), memory stays on 0..100
-const histTop = (h) => Math.max(25, ...h) * 1.15
 function sysCard(key, label, right, value, sub, now, hist, top, title = '') {
   return `<div class="scard" data-c="${key}" title="${esc(title)}">
     <div class="sfill" data-h="${Math.max(3, Math.min(now, top) / top * 90)}"></div>
@@ -155,9 +154,9 @@ function drawSystem() {
   const g = sys.gpu
   const n = sys.cores.length
   const cards = [
-    sysCard('cpu', 'CPU', `<span>${temp(sys.cpuTemp) || T.cores(n)}</span>`, `${cpu}%`, T.lastMin, cpu, cpuHist, histTop(cpuHist)),
+    sysCard('cpu', 'CPU', `<span>${temp(sys.cpuTemp) || T.cores(n)}</span>`, `${cpu}%`, T.lastMin, cpu, cpuHist, 100),
     sysCard('ram', 'RAM', `<span>${gb(sys.memTotal)} ${T.gb}</span>`, `${gb(sys.memUsed)}<small> ${T.gb}</small>`, `${Math.round(memP)}%`, memP, memHist, 100),
-    g ? sysCard('gpu', 'GPU', temp(g.temp), `${Math.round(g.load)}%`, esc(g.name.replace(/^NVIDIA (GeForce )?/i, '')), g.load, gpuHist, histTop(gpuHist),
+    g ? sysCard('gpu', 'GPU', temp(g.temp), `${Math.round(g.load)}%`, esc(g.name.replace(/^NVIDIA (GeForce )?/i, '')), g.load, gpuHist, 100,
       `${g.name} · ${gb(g.memUsed)} / ${gb(g.memTotal)} ${T.gb}`) : '',
   ].join('')
   // a core = its threads side by side; the tooltip has the numbers
