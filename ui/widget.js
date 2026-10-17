@@ -82,7 +82,7 @@ function render() {
   $('head').innerHTML =
     `<span class="dot ${wait ? 'wait' : busy ? 'busy' : 'idle'}" data-tauri-drag-region title="${T.sizeHint}"></span>` +
     `<span data-tauri-drag-region>${wait ? T.waiting(wait) : T.nobodyWaits}${busy ? ` <span class="muted">·</span> ${T.busy(busy)}` : ''}</span>` +
-    `<span class="right">${values ? `<span class="counter-head" data-tauri-drag-region title="${esc(S.counter.label)}">${esc(S.counter.label ? S.counter.label + ' ' : '')}${esc(values)}</span>` : ''}` +
+    `<span class="right">${values ? `<span class="counter-head" data-tauri-drag-region title="${esc(counterInfo())}">${esc(S.counter.label ? S.counter.label + ' ' : '')}${esc(values)}</span>` : ''}` +
     `<button class="gear" id="gear" title="${T.settings}">⚙</button></span>`
 
   // limits: one block per account (a limit belongs to the account; every session of it spends the same one)
@@ -93,10 +93,16 @@ function render() {
     const p = fresh(b) ? Math.round(b.used_percentage) : 0
     return `<span class="lbl">${label}</span>${bar(p, th.limitWarn, th.limitFull)}<span class="pct">${p}%</span>`
   }
+  // the whole line's tooltip says everything (owner 2026-10-17: a dense layout hides the words, a hover brings them)
+  const limInfo = (label, b) => {
+    const p = fresh(b) ? Math.round(b.used_percentage) : 0
+    return `${label}: ${p}%` + (fresh(b) && b.resets_at ? ` · ${T.resets} ${T.in} ${left(b.resets_at)}` : '')
+  }
   $('limits').innerHTML = !S.showLimits ? '' : limits.length ? limits.map(l => {
+    const info = [l.account, limInfo(T.h5, l.five_hour), limInfo(T.d7, l.seven_day)].join('\n')
     const resets = [fresh(l.five_hour) && l.five_hour.resets_at && `${T.h5} ${T.in} ${left(l.five_hour.resets_at)}`,
                     fresh(l.seven_day) && l.seven_day.resets_at && `${T.d7} ${T.in} ${left(l.seven_day.resets_at)}`].filter(Boolean).join(' · ')
-    return `<div class="lim"><span class="tag" data-acc="${l.accountIndex}" title="${esc(l.account)}">${esc(l.account)}</span>
+    return `<div class="lim" title="${esc(info)}"><span class="tag" data-acc="${l.accountIndex}">${esc(l.account)}</span>
       ${lim(T.h5, l.five_hour)}${lim(T.d7, l.seven_day)}</div>
       ${resets ? `<div class="resets details">${T.resets}: ${resets}</div>` : ''}`
   }).join('') : `<div class="empty">${T.limitsLater}</div>`
@@ -107,14 +113,18 @@ function render() {
     const st = state(s)
     const ctx = s.context != null ? Math.round(s.context) : null
     const hint = ctx == null ? '' : ctx >= th.contextFull ? ' — ' + T.clear : ctx >= th.contextWarn ? ' — ' + T.compact : ''
-    return `<div class="row ${st}${many ? ' acc' : ''}" data-id="${esc(s.sessionId)}"${many ? ` data-acc="${s.accountIndex}"` : ''} title="${esc(s.cwd)}">
+    const doing = `${s.status === 'shell' ? T.background : st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free} ${ago(s.since)}`
+    // the row's tooltip: what the details line and the hidden parts would say (chips and dots show no words)
+    const info = [s.name || folder(s.cwd), s.cwd, doing + (s.kind === 'bg' ? ' · ' + T.bg : ''),
+      ctx != null ? `${T.context} ${ctx}%${hint}` : '', many ? s.account : ''].filter(Boolean).join('\n')
+    return `<div class="row ${st}${many ? ' acc' : ''}" data-id="${esc(s.sessionId)}"${many ? ` data-acc="${s.accountIndex}"` : ''} title="${esc(info)}">
       <span class="dot ${st}"></span>
       <span class="name">${esc(s.name || folder(s.cwd))}</span>
-      ${many ? `<span class="letter" data-acc="${s.accountIndex}" title="${esc(s.account)}">${esc((s.account || '?').slice(0, 1).toUpperCase())}</span>` : ''}
-      ${S.showContext ? `<span class="ctxbar" title="${T.context} ${ctx ?? '?'}%${hint}">${ctx != null
+      ${many ? `<span class="letter" data-acc="${s.accountIndex}">${esc((s.account || '?').slice(0, 1).toUpperCase())}</span>` : ''}
+      ${S.showContext ? `<span class="ctxbar">${ctx != null
         ? bar(ctx, th.contextWarn, th.contextFull) + `<span class="pct">${ctx}%</span>` : '<span class="muted">—</span>'}</span>` : ''}
     </div>
-    <div class="sub details">${esc(folder(s.cwd))}${s.kind === 'bg' ? ' · ' + T.bg : ''} · ${s.status === 'shell' ? T.background : st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free} ${ago(s.since)}${hint}</div>`
+    <div class="sub details">${esc(folder(s.cwd))}${s.kind === 'bg' ? ' · ' + T.bg : ''} · ${doing}${hint}</div>`
   }).join('') : `<div class="empty">${T.noSessions}</div>`
 
   $('counter').innerHTML = !S.counter.enabled ? '' : Array.isArray(counter)
@@ -127,12 +137,15 @@ function render() {
   fit()
 }
 
+// the counter's tooltip: every field with its name
+const counterInfo = () => [S.counter.label, ...S.counter.fields.map((f, i) => `${fieldName(f)}: ${Array.isArray(counter) ? counter[i] ?? '–' : '–'}`)].filter(Boolean).join('\n')
+
 // ---- the System section ----
 // Three cards — CPU, RAM, GPU: each fills from the bottom with the load now, a line over it draws the last 2 minutes,
 // the number on top. Under them a column per physical core, split into its threads (two thin bars side by side),
 // each with a glowing cap; their color follows the load.
 const tempLevel = (c) => c >= 80 ? 'full' : c >= 62 ? 'hot' : ''
-const temp = (c) => c == null ? '' : `<span class="temp ${tempLevel(c)}" title="°C">${Math.round(c)}°</span>`
+const temp = (c) => c == null ? '' : `<span class="temp ${tempLevel(c)}">${Math.round(c)}°</span>`
 const gb = (b) => (b / 1073741824).toFixed(b >= 10 * 1073741824 ? 0 : 1)
 const SYS_COLORS = {cpu: 'var(--accent)', ram: '#fb923c', gpu: 'var(--ok)'}
 // the last 2 minutes as a line in a 100×100 box; `top` = the value at the card's top (always 100%: the fill and the
@@ -153,11 +166,18 @@ function drawSystem() {
   const memP = sys.memTotal ? sys.memUsed / sys.memTotal * 100 : 0
   const g = sys.gpu
   const n = sys.cores.length
+  // `.opt`: a card's side note that a narrow window drops (a temperature stays)
+  // tooltips: the full numbers, also where a dense layout shows only a bar
+  const deg = (c) => c == null ? '' : ` · ${Math.round(c)}°C`
+  const tip = {
+    cpu: `CPU ${cpu}% · ${T.cores(n)}${deg(sys.cpuTemp)}`,
+    ram: `RAM ${gb(sys.memUsed)} / ${gb(sys.memTotal)} ${T.gb} (${Math.round(memP)}%)`,
+    gpu: g ? `${g.name} ${Math.round(g.load)}%${deg(g.temp)}\nVRAM ${gb(g.memUsed)} / ${gb(g.memTotal)} ${T.gb}` : '',
+  }
   const cards = [
-    sysCard('cpu', 'CPU', `<span>${temp(sys.cpuTemp) || T.cores(n)}</span>`, `${cpu}%`, T.lastMin, cpu, cpuHist, 100),
-    sysCard('ram', 'RAM', `<span>${gb(sys.memTotal)} ${T.gb}</span>`, `${gb(sys.memUsed)}<small> ${T.gb}</small>`, `${Math.round(memP)}%`, memP, memHist, 100),
-    g ? sysCard('gpu', 'GPU', temp(g.temp), `${Math.round(g.load)}%`, esc(g.name.replace(/^NVIDIA (GeForce )?/i, '')), g.load, gpuHist, 100,
-      `${g.name} · ${gb(g.memUsed)} / ${gb(g.memTotal)} ${T.gb}`) : '',
+    sysCard('cpu', 'CPU', temp(sys.cpuTemp) || `<span class="opt">${T.cores(n)}</span>`, `${cpu}%`, T.lastMin, cpu, cpuHist, 100, tip.cpu),
+    sysCard('ram', 'RAM', `<span class="opt">${gb(sys.memTotal)} ${T.gb}</span>`, `${gb(sys.memUsed)}<small> ${T.gb}</small>`, `${Math.round(memP)}%`, memP, memHist, 100, tip.ram),
+    g ? sysCard('gpu', 'GPU', temp(g.temp), `${Math.round(g.load)}%`, esc(g.name.replace(/^NVIDIA (GeForce )?/i, '')), g.load, gpuHist, 100, tip.gpu) : '',
   ].join('')
   // a core = its threads side by side; the tooltip has the numbers
   const cores = S.system.threads && n ? `<div class="cores" data-n="${n}">${sys.cores.map((c, i) => {
@@ -165,7 +185,11 @@ function drawSystem() {
     return `<span class="core" title="${T.core} ${i + 1}: ${Math.round(c)}%${th.length > 1 ? ` (${T.threads}: ${th.map(t => Math.round(t) + '%').join(' · ')})` : ''}">` +
       th.map(t => `<i class="${level(t, 70, 90)}" data-h="${Math.max(5, t)}"></i>`).join('') + '</span>'
   }).join('')}</div>` : ''
-  el.innerHTML = `<div class="scards${g ? '' : ' two'}">${cards}</div>${cores}`
+  // the same numbers as one line, for the denser layouts (CSS shows it instead of the cards)
+  const item = (label, p, text) => `<span class="si" title="${esc(tip[label.toLowerCase()])}"><b>${label}</b>${bar(p, 70, 90)}<span class="pct">${text}</span></span>`
+  const line = `<div class="sysline">${item('CPU', cpu, cpu + '%')}${item('RAM', memP, Math.round(memP) + '%')}${g ? item('GPU', g.load, Math.round(g.load) + '%') : ''}</div>`
+  el.innerHTML = `<div class="scards${g ? '' : ' two'}">${cards}</div>${cores}${line}`
+  for (const i of el.querySelectorAll('.bar i')) i.style.width = i.dataset.p + '%'
   for (const c of el.querySelectorAll('.scard')) c.style.setProperty('--c', SYS_COLORS[c.dataset.c])
   for (const f of el.querySelectorAll('.sfill, .core i')) f.style.height = f.dataset.h + '%'
   const grid = el.querySelector('.cores')
@@ -189,15 +213,18 @@ async function pollSystem() {
   sysTimer = setTimeout(pollSystem, 2000)
 }
 
-// Size. The height always follows what the widget shows — a session that starts adds a line, one that ends takes it
-// away. The width and the LAYOUT are yours: drag an edge and the layout adapts live to the height you drag to
-// (full → 1 no details + lower rows → 2 sessions as chips → 3 only the status dots); when you let go, that layout
-// stays and the height snaps to its content. Double-click the header for the defaults (300 px, the full layout).
-// Narrow widths drop the numbers (CSS). No scrolling.
-let fixed = null                     // {w, level} — your width and layout, or null = the defaults (settings.size)
+// Size. Automatic (nothing dragged yet, or a double-click on the header): 300 px wide, the full layout, the height
+// follows what the widget shows. Yours (an edge dragged): the width AND the height stay exactly where you let go — the
+// layout is the least dense one that fits that height, picked live while you drag, so what you see while dragging is
+// what stays (owner 2026-10-17). Room to spare: the System cards grow into it, or it stays empty. The window can't be
+// dragged smaller than the densest layout (its minimum follows the content); content that outgrows even that (a new
+// session) makes the window grow. Narrow widths drop side notes and numbers (CSS). No scrolling.
+// The layouts, each a step denser (CSS body.denseN, cumulative, gentle first): 1 shorter cards → 2 no details →
+// 3 tighter rows → 4 System as one line → 5 sessions as chips → 6 limits as text → 7 no System, dots → 8 no limits.
+let fixed = null                     // {w, h} — your size, or null = automatic (settings.size)
 let ourResize = 0
 let dragging = null                  // the timer that ends a drag
-const DENSE = ['dense1', 'dense2', 'dense3']
+const LEVELS = 8
 // the content's real height: the lowest visible child's bottom (scrollHeight is never below the box's own height)
 const contentOf = (el) => {
   const top = el.getBoundingClientRect().top - el.scrollTop
@@ -208,21 +235,49 @@ const contentOf = (el) => {
   }
   return bottom
 }
-const natural = () => $('head').offsetHeight + contentOf(editing ? $('settings') : $('view')) + 16
-const setLevel = (level) => DENSE.forEach((d, i) => document.body.classList.toggle(d, !editing && i < level))
-// while dragging: the least dense layout that fits the height under the mouse
-function densify() {
-  setLevel(0)
+// what the content needs, measured without the stretch into spare room
+const natural = () => {
+  document.body.classList.add('measuring')
+  const h = $('head').offsetHeight + contentOf(editing ? $('settings') : $('view')) + 16
+  document.body.classList.remove('measuring')
+  return h
+}
+const setLevel = (level) => { for (let i = 1; i <= LEVELS; i++) document.body.classList.toggle('dense' + i, !editing && i <= level) }
+// the least dense layout that fits the height `h` (the densest if none does); it stays set
+function levelFor(h) {
   let level = 0
-  while (level < DENSE.length && natural() > $('box').clientHeight + 2) setLevel(++level)
+  setLevel(0)
+  while (level < LEVELS && natural() > h + 1) setLevel(++level)
   return level
 }
+// the densest layout's height: the window's minimum
+const smallest = () => { setLevel(LEVELS); return Math.ceil(natural()) }
 async function fit() {
   if (dragging) return                // the mouse owns the size until it lets go
-  setLevel(fixed ? fixed.level || 0 : 0)
-  const w = editing ? Math.max(fixed ? fixed.w : 300, 340) : fixed ? fixed.w : 300
   ourResize = Date.now()
-  await win.setSize(new LogicalSize(w, Math.max(40, Math.min(natural(), editing ? 640 : 900)))).catch(() => {})
+  if (editing) {
+    setLevel(0)
+    return win.setSize(new LogicalSize(Math.max(fixed ? fixed.w : 300, 340), Math.max(40, Math.min(natural(), 640)))).catch(() => {})
+  }
+  const min = Math.max(40, smallest())
+  await win.setMinSize(new LogicalSize(220, min)).catch(() => {})
+  let w = 300, h
+  if (fixed) {
+    // a size saved before 0.1.6 has no height: the full layout's (its old dense level opened cramped — owner
+    // 2026-10-17), saved so it stays
+    if (fixed.h == null) {
+      setLevel(0)
+      fixed.h = Math.round(natural())
+      invoke('size_set', {size: {w: fixed.w, h: fixed.h, level: 0}}).catch(() => {})
+    }
+    levelFor(fixed.h)
+    w = fixed.w
+    h = Math.max(fixed.h, min, natural())
+  } else {
+    setLevel(0)
+    h = Math.min(natural(), 900)
+  }
+  await win.setSize(new LogicalSize(w, Math.max(40, h))).catch(() => {})
 }
 
 // a click (not a drag) on the header toggles the details; ⚙ opens the settings; a click on a session = "seen"
@@ -455,14 +510,20 @@ async function pollCounter() {
     clearTimeout(moveTimer)
     moveTimer = setTimeout(() => invoke('pos_set', {x: payload.x, y: payload.y}).catch(() => {}), 300)
   })
-  // a resize by you (not by fit()): from now on the size is yours; the layout follows every step
+  // a resize by you (not by fit()): from now on the size is yours; the layout follows every step, live
   win.onResized(async ({payload}) => {
     if (Date.now() - ourResize < 400 || editing) return
     const sf = await win.scaleFactor().catch(() => 1)
+    const size = {w: Math.round(payload.width / sf), h: Math.round(payload.height / sf)}
+    fixed = size
     clearTimeout(dragging)
-    // let go → the height snaps to the content, and the size is saved (once, not on every step of the drag)
-    dragging = setTimeout(() => { dragging = null; fit(); invoke('size_set', {size: fixed}).catch(() => {}) }, 450)
-    requestAnimationFrame(() => { fixed = {w: Math.round(payload.width / sf), level: densify()} })
+    // let go → nothing moves (the layout is already the one for this height); the size is saved once, not every step
+    dragging = setTimeout(() => {
+      dragging = null
+      invoke('size_set', {size: {...size, level: levelFor(size.h)}}).catch(() => {})
+      fit()
+    }, 450)
+    requestAnimationFrame(() => levelFor(size.h))
   })
   try { localStorage.removeItem('width'); localStorage.removeItem('maxH') } catch (e) {}
   await pollSessions()

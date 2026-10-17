@@ -76,10 +76,13 @@ pub struct Pos {
     pub y: i32,
 }
 
-/// The width and layout you dragged the window to (logical pixels; level = how dense, 0..3).
+/// The size you dragged the window to (logical pixels). `h`: the height you let go at — kept as it is (since 0.1.6;
+/// a size saved before has none and opens at the full layout's height); `level` = how dense the layout was, 0..8.
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct Size {
     pub w: f64,
+    #[serde(default)]
+    pub h: Option<f64>,
     pub level: u8,
 }
 
