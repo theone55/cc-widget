@@ -195,6 +195,15 @@ fn main() {
                 || (settings.language == "auto" && std::env::var("LANG").is_ok_and(|l| l.starts_with("ru")));
             app.manage(AppState { config_dir, settings: Mutex::new(settings), system: Mutex::new(system::Sampler::new()) });
             tray::create(app.handle(), russian)?;
+            // autostart keeps the path of the exe that turned it on: one switched on from a dev build (a console
+            // window) or an older install location would start that one — the installed app writes its own path back
+            if !cfg!(debug_assertions) {
+                use tauri_plugin_autostart::ManagerExt;
+                let autostart = app.autolaunch();
+                if autostart.is_enabled().unwrap_or(false) {
+                    let _ = autostart.enable();
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
