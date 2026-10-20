@@ -22,9 +22,10 @@ const esc = (t) => String(t ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': 
 const folder = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || p
 
 // A session "waits" when its turn is over (idle) and you haven't clicked it since: the click is the "seen".
-// "shell": the turn is over but a background command still runs (a build Claude waits for) — working, not waiting
-const state = (s) => s.status === 'busy' || s.status === 'shell' ? 'busy'
-  : s.status === 'idle' ? ((seen[s.sessionId] || 0) >= s.since ? 'idle' : 'wait')
+// "shell": the turn is over but a background command still runs (a dev server, a watcher) — the turn is yours like idle;
+// counting it as working left finished sessions "working" for hours (owner 2026-10-20)
+const state = (s) => s.status === 'busy' ? 'busy'
+  : s.status === 'idle' || s.status === 'shell' ? ((seen[s.sessionId] || 0) >= s.since ? 'idle' : 'wait')
   : 'wait'                // anything else (a permission prompt…) needs you
 const ago = (ms) => {
   const m = Math.max(0, Math.round((Date.now() - ms) / 60000))
@@ -113,7 +114,7 @@ function render() {
     const st = state(s)
     const ctx = s.context != null ? Math.round(s.context) : null
     const hint = ctx == null ? '' : ctx >= th.contextFull ? ' — ' + T.clear : ctx >= th.contextWarn ? ' — ' + T.compact : ''
-    const doing = `${s.status === 'shell' ? T.background : st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free} ${ago(s.since)}`
+    const doing = `${st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free}${s.status === 'shell' ? ' · ' + T.background : ''} ${ago(s.since)}`
     // the row's tooltip: what the details line and the hidden parts would say (chips and dots show no words)
     const info = [s.name || folder(s.cwd), s.cwd, doing + (s.kind === 'bg' ? ' · ' + T.bg : ''),
       ctx != null ? `${T.context} ${ctx}%${hint}` : '', many ? s.account : ''].filter(Boolean).join('\n')
