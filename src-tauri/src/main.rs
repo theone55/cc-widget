@@ -11,6 +11,7 @@ mod paths;
 mod sessions;
 mod settings;
 mod statusline;
+mod remote;
 mod system;
 mod tray;
 
@@ -124,6 +125,26 @@ async fn system_stats(state: tauri::State<'_, AppState>) -> Result<system::Stats
     Ok(state.system.lock().unwrap().sample(panel.gpu))
 }
 
+/// The other machine's load (the page asks every 4 s while it is on).
+#[tauri::command]
+async fn remote_host(state: tauri::State<'_, AppState>) -> Result<system::Stats, String> {
+    let remote = current(&state).remote;
+    if !remote.enabled || remote.host_url.trim().is_empty() {
+        return Err("off".into());
+    }
+    remote::host(&remote).await
+}
+
+/// The other machine's Claude runs: the running ones, then the latest.
+#[tauri::command]
+async fn remote_runs(state: tauri::State<'_, AppState>) -> Result<Vec<remote::Run>, String> {
+    let remote = current(&state).remote;
+    if !remote.enabled || remote.runs_url.trim().is_empty() {
+        return Err("off".into());
+    }
+    remote::runs(&remote).await
+}
+
 #[tauri::command]
 fn counter_has_token() -> bool {
     counter::token().is_some()
@@ -182,6 +203,8 @@ fn main() {
             counter_has_token,
             focus_session,
             system_stats,
+            remote_host,
+            remote_runs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running cc-widget");

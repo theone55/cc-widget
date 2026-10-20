@@ -75,13 +75,25 @@ async fn pass(client: &reqwest::Client, pass_url: &str, token: &str, fresh: bool
 }
 
 pub async fn fetch(counter: &Counter) -> Result<Vec<Value>, String> {
-    let url = counter.url.trim();
+    let body = get(&counter.url, &counter.pass_url).await?;
+    // a field is "path" or "name=path": the name is only for the page
+    Ok(counter
+        .fields
+        .iter()
+        .map(|f| pick(&body, f.rsplit_once('=').map_or(f.as_str(), |(_, p)| p).trim()).cloned().unwrap_or(Value::Null))
+        .collect())
+}
+
+/// GET `url` → JSON, with the saved token as the bearer — or, with a `pass_url`, with a short-lived pass that token
+/// is swapped for there (also the remote machine's runs, remote.rs).
+pub async fn get(url: &str, pass_url: &str) -> Result<Value, String> {
+    let url = url.trim();
     if url.is_empty() {
         return Err("no-url".into());
     }
     let client = reqwest::Client::builder().timeout(Duration::from_secs(10)).build().map_err(|e| e.to_string())?;
     let token = token();
-    let pass_url = counter.pass_url.trim();
+    let pass_url = pass_url.trim();
     let body = if pass_url.is_empty() {
         let (status, body) = get_json(&client, url, token.as_deref()).await?;
         body.ok_or(format!("HTTP {status}"))?
@@ -98,12 +110,7 @@ pub async fn fetch(counter: &Counter) -> Result<Vec<Value>, String> {
             None => return Err(format!("HTTP {status}")),
         }
     };
-    // a field is "path" or "name=path": the name is only for the page
-    Ok(counter
-        .fields
-        .iter()
-        .map(|f| pick(&body, f.rsplit_once('=').map_or(f.as_str(), |(_, p)| p).trim()).cloned().unwrap_or(Value::Null))
-        .collect())
+    Ok(body)
 }
 
 #[cfg(test)]

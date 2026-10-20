@@ -60,7 +60,7 @@ body.dense6 #limits { display: flex; flex-wrap: wrap; column-gap: 10px; }
 body.dense6 .lim { gap: 4px; }
 body.dense6 .lim .bar { display: none; }
 body.dense6 .lim .pct { width: auto; margin-right: 2px; }
-body.dense7 #system { display: none; }
+body.dense7 #system, body.dense7 .rsys, body.dense7 .row .rago { display: none; }
 body.dense7 .row { padding: 0 3px; gap: 0; }
 body.dense7 .row .name, body.dense7 .row .ctxbar { display: none; }
 body.dense7 .row .dot { width: 10px; height: 10px; }
@@ -154,6 +154,14 @@ body.dense8 #limits { display: none; }
 .core i.full { background: linear-gradient(to top, var(--warn), var(--full)); border-top-color: var(--full);
   box-shadow: 0 -1px 4px color-mix(in srgb, var(--full) 55%, transparent); }
 
+/* the other machine: its own group under this one's */
+#remote:not(:empty) { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+.rhead { display: flex; align-items: center; gap: 6px; height: 20px; }
+.rhead .rerr { color: var(--full); font-weight: 700; cursor: help; }
+.row .rago { font-size: 10px; flex: none; }
+.rsys:not(:empty) { margin-top: 4px; }
+.rsys .scards { grid-auto-rows: minmax(54px, 1fr); }
+body.dense1 .rsys .scards { grid-auto-rows: minmax(40px, 1fr); }
 .row { display: flex; align-items: center; gap: 6px; min-height: 20px; border-radius: 5px; cursor: pointer; padding: 0 2px; }
 .row:hover { background: var(--hover); }
 .row.acc { background: color-mix(in srgb, var(--acc) 17%, transparent); margin: 2px 0; padding: 0 5px; }

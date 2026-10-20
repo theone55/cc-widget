@@ -69,6 +69,21 @@ pub struct Counter {
     pub every: u32,
 }
 
+/// An optional other machine (a home server running Claude unattended): its load like the System section, and its
+/// Claude runs (remote.rs has the formats). Uses the counter's token; `passUrl` is only for the runs.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Remote {
+    pub enabled: bool,
+    /// the group's name in the widget ("server", "119")
+    pub label: String,
+    /// its color, like an account's ("" = the palette's)
+    pub color: String,
+    pub host_url: String,
+    pub runs_url: String,
+    pub pass_url: String,
+}
+
 /// Where the window is (physical pixels of the desktop).
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub struct Pos {
@@ -123,6 +138,7 @@ pub struct Settings {
     pub expanded: bool,
     pub counter: Counter,
     pub system: SystemPanel,
+    pub remote: Remote,
     /// the window's place and size, saved here on every change (they used to live in the webview's localStorage,
     /// which is written to disk lazily: a shutdown lost them)
     pub pos: Option<Pos>,
@@ -151,6 +167,7 @@ impl Default for Settings {
             expanded: false,
             counter: Counter { every: 5, ..Counter::default() },
             system: SystemPanel::default(),
+            remote: Remote::default(),
             pos: None,
             size: None,
         }

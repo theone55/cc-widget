@@ -74,7 +74,7 @@ dark.addEventListener('change', () => { if (S) { applyLook(); render() } })
 function render() {
   if (!S || editing) return
   const shown = sessions.filter(s => S.showBackground || s.kind !== 'bg')
-  const busy = shown.filter(s => state(s) === 'busy').length
+  const busy = shown.filter(s => state(s) === 'busy').length + (S.remote.enabled ? remoteBusy() : 0)
   const wait = shown.filter(s => state(s) === 'wait').length
   $('box').classList.toggle('waiting', wait > 0)
   document.body.classList.toggle('open', !!S.expanded)
@@ -160,8 +160,11 @@ function sysCard(key, label, right, value, sub, now, hist, top, title = '') {
     <div class="shd"><span>${label}</span>${right}</div><div class="sval">${value}</div><div class="ssub">${sub}</div></div>`
 }
 function drawSystem() {
-  const el = $('system')
-  if (!S.system.enabled || !sys) { if (el.innerHTML) el.innerHTML = ''; return }
+  drawSys($('system'), S.system.enabled ? sys : null, {cpu: cpuHist, mem: memHist, gpu: gpuHist}, S.system.threads)
+}
+// the cards + cores + one-line form of `sys` (this machine's or the remote one's) into `el`; hist = their 2 minutes
+function drawSys(el, sys, hist, threadsOn) {
+  if (!sys) { if (el.innerHTML) el.innerHTML = ''; return }
   const before = el.offsetHeight
   const cpu = Math.round(sys.cpu)
   const memP = sys.memTotal ? sys.memUsed / sys.memTotal * 100 : 0
@@ -176,12 +179,12 @@ function drawSystem() {
     gpu: g ? `${g.name} ${Math.round(g.load)}%${deg(g.temp)}\nVRAM ${gb(g.memUsed)} / ${gb(g.memTotal)} ${T.gb}` : '',
   }
   const cards = [
-    sysCard('cpu', 'CPU', temp(sys.cpuTemp) || `<span class="opt">${T.cores(n)}</span>`, `${cpu}%`, T.lastMin, cpu, cpuHist, 100, tip.cpu),
-    sysCard('ram', 'RAM', `<span class="opt">${gb(sys.memTotal)} ${T.gb}</span>`, `${gb(sys.memUsed)}<small> ${T.gb}</small>`, `${Math.round(memP)}%`, memP, memHist, 100, tip.ram),
-    g ? sysCard('gpu', 'GPU', temp(g.temp), `${Math.round(g.load)}%`, esc(g.name.replace(/^NVIDIA (GeForce )?/i, '')), g.load, gpuHist, 100, tip.gpu) : '',
+    sysCard('cpu', 'CPU', temp(sys.cpuTemp) || `<span class="opt">${T.cores(n)}</span>`, `${cpu}%`, T.lastMin, cpu, hist.cpu, 100, tip.cpu),
+    sysCard('ram', 'RAM', `<span class="opt">${gb(sys.memTotal)} ${T.gb}</span>`, `${gb(sys.memUsed)}<small> ${T.gb}</small>`, `${Math.round(memP)}%`, memP, hist.mem, 100, tip.ram),
+    g ? sysCard('gpu', 'GPU', temp(g.temp), `${Math.round(g.load)}%`, esc(g.name.replace(/^NVIDIA (GeForce )?/i, '')), g.load, hist.gpu, 100, tip.gpu) : '',
   ].join('')
   // a core = its threads side by side; the tooltip has the numbers
-  const cores = S.system.threads && n ? `<div class="cores" data-n="${n}">${sys.cores.map((c, i) => {
+  const cores = threadsOn && n ? `<div class="cores" data-n="${n}">${sys.cores.map((c, i) => {
     const th = sys.threads.slice(i * sys.perCore, (i + 1) * sys.perCore)
     return `<span class="core" title="${T.core} ${i + 1}: ${Math.round(c)}%${th.length > 1 ? ` (${T.threads}: ${th.map(t => Math.round(t) + '%').join(' · ')})` : ''}">` +
       th.map(t => `<i class="${level(t, 70, 90)}" data-h="${Math.max(5, t)}"></i>`).join('') + '</span>'
@@ -212,6 +215,53 @@ async function pollSystem() {
     if (!editing) drawSystem()
   }
   sysTimer = setTimeout(pollSystem, 2000)
+}
+
+// ---- the other machine (settings.remote): its Claude runs and its load, a group of its own ----
+let remoteSys = null, remoteRuns = null, remoteErr = ''
+const rHist = {cpu: [], mem: [], gpu: []}
+let remoteTimer = null
+async function pollRemote() {
+  clearTimeout(remoteTimer)
+  const r = S.remote
+  if (!r.enabled) { remoteSys = remoteRuns = null; remoteErr = ''; rHist.cpu.length = rHist.mem.length = rHist.gpu.length = 0; drawRemote(); return }
+  const [h, runs] = await Promise.all([
+    r.hostUrl ? invoke('remote_host').then(v => [v]).catch(e => [null, e]) : [null],
+    r.runsUrl ? invoke('remote_runs').then(v => [v]).catch(e => [null, e]) : [null],
+  ])
+  remoteSys = h[0]
+  remoteRuns = runs[0]
+  remoteErr = [h[1], runs[1]].filter(Boolean).map(String).join(' · ')
+  if (remoteSys) {
+    rHist.cpu.push(remoteSys.cpu)
+    rHist.mem.push(remoteSys.memTotal ? remoteSys.memUsed / remoteSys.memTotal * 100 : 0)
+    if (remoteSys.gpu) rHist.gpu.push(remoteSys.gpu.load)
+    for (const x of Object.values(rHist)) while (x.length > 30) x.shift()   // 2 minutes at 4 s
+  }
+  if (!editing) { drawRemote(); render() }
+  remoteTimer = setTimeout(pollRemote, 4000)
+}
+const remoteBusy = () => (remoteRuns || []).filter(r => r.status === 'busy').length
+function drawRemote() {
+  const el = $('remote')
+  const r = S.remote
+  if (!r.enabled) { if (el.innerHTML) el.innerHTML = ''; return }
+  const before = el.offsetHeight
+  const since = (run) => Date.parse(run.status === 'busy' ? run.startedAt : run.finishedAt || run.startedAt) || Date.now()
+  const label = r.label || T.remote
+  const rows = (remoteRuns || []).map(run => {
+    const st = run.status === 'busy' ? 'busy' : run.status === 'error' ? 'wait' : 'idle'
+    const doing = `${run.status === 'busy' ? T.working : run.status === 'error' ? T.failed : T.finished} ${ago(since(run))}`
+    return `<div class="row ${st}" title="${esc([run.name, doing, run.origin].filter(Boolean).join('\n'))}">
+      <span class="dot ${st}"></span><span class="name">${esc(run.name || '#' + run.id)}</span><span class="muted rago">${ago(since(run))}</span></div>`
+  }).join('')
+  el.innerHTML = `<div class="rhead"><span class="tag" id="rtag">${esc(label)}</span>` +
+    `<span class="muted">${remoteRuns ? (remoteBusy() ? T.busy(remoteBusy()) : T.nothingRuns) : ''}</span>` +
+    `${remoteErr ? `<span class="rerr" title="${esc(remoteErr)}">!</span>` : ''}</div>${rows}<div class="rsys"></div>`
+  const c = r.color || PALETTE[S.accounts.length % PALETTE.length]
+  const tag = $('rtag'); tag.style.color = c; tag.style.borderColor = c
+  drawSys(el.querySelector('.rsys'), remoteSys, rHist, true)
+  if (el.offsetHeight !== before) fit()
 }
 
 // Size. Automatic (nothing dragged yet, or a double-click on the header): 300 px wide, the full layout, the height
@@ -326,6 +376,7 @@ async function openSettings() {
   f.hidden = false
   const auto = await invoke('plugin:autostart|is_enabled').catch(() => false)
   const hasToken = await invoke('counter_has_token').catch(() => false)
+  const version = await window.__TAURI__.app?.getVersion().catch(() => '') ?? ''
   const opt = (v, cur, label) => `<option value="${v}"${v === cur ? ' selected' : ''}>${label}</option>`
   const num = (name, v) => `<input type="number" min="1" max="100" name="${name}" value="${v}">`
   const check = (name, on, label) => `<label><span>${label}</span><input type="checkbox" name="${name}"${on ? ' checked' : ''}></label>`
@@ -358,9 +409,17 @@ async function openSettings() {
     <div class="hint">${T.fields}</div><input class="wide" type="text" name="counterFields" value="${esc(S.counter.fields.join(', '))}" placeholder="visitors.today, visitors.days7">
     <label><span>${T.every}</span><input type="number" min="1" max="1440" name="counterEvery" value="${S.counter.every || 5}"></label>
     <div class="hint">${T.token}: ${hasToken ? T.tokenSaved : T.tokenNone}</div><input class="wide" type="password" name="counterToken" autocomplete="off">
+    <h4>${T.remote}</h4>
+    <div class="hint">${T.remoteHint}</div>
+    ${check('remoteEnabled', S.remote.enabled, T.enabled)}
+    <label><span>${T.label}</span><input type="text" name="remoteLabel" value="${esc(S.remote.label)}" placeholder="server"><input type="color" name="remoteColor" value="${S.remote.color || PALETTE[S.accounts.length % PALETTE.length]}"></label>
+    <div class="hint">${T.remoteHost}</div><input class="wide" type="text" name="remoteHost" value="${esc(S.remote.hostUrl)}" placeholder="http://…/api/v1/monitor/host">
+    <div class="hint">${T.remoteRuns}</div><input class="wide" type="text" name="remoteRuns" value="${esc(S.remote.runsUrl)}" placeholder="http://…/api/admin/usage">
+    <div class="hint">${T.passUrl}</div><input class="wide" type="text" name="remotePass" value="${esc(S.remote.passUrl)}">
     <h4>${T.system}</h4>
     ${check('sysEnabled', S.system.enabled, T.sysOn)}${check('sysThreads', S.system.threads, T.sysThreads)}${check('sysGpu', S.system.gpu, T.sysGpu)}
     <div class="hint">${T.sysHint}</div>
+    <div class="hint version">cc-widget ${esc(version)}</div>
     <div class="actions"><button type="button" id="cancel">${T.cancel}</button><button type="submit" class="primary">${T.save}</button></div>`
   drawAccounts(S.accounts.map(a => ({...a})))
   for (const i of f.querySelectorAll('.bar i')) i.style.width = i.dataset.p + '%'
@@ -446,6 +505,8 @@ $('settings').addEventListener('submit', async e => {
       fields: v('counterFields').value.split(',').map(s => s.trim()).filter(Boolean),
       every: Math.min(1440, Math.max(1, Number(v('counterEvery').value) || 5)),
     },
+    remote: {enabled: v('remoteEnabled').checked, label: v('remoteLabel').value.trim(), color: v('remoteColor').value,
+      hostUrl: v('remoteHost').value.trim(), runsUrl: v('remoteRuns').value.trim(), passUrl: v('remotePass').value.trim()},
     system: {enabled: v('sysEnabled').checked, threads: v('sysThreads').checked, gpu: v('sysGpu').checked},
   }
   await invoke('settings_set', {settings: next})
@@ -457,6 +518,7 @@ $('settings').addEventListener('submit', async e => {
   closeSettings()
   pollCounter()
   pollSystem()
+  pollRemote()
 })
 
 function closeSettings() {
@@ -530,5 +592,6 @@ async function pollCounter() {
   await pollSessions()
   pollCounter()
   pollSystem()
+  pollRemote()
   setInterval(pollSessions, 2000)
 })()

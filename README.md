@@ -68,12 +68,21 @@ Everything is in ⚙:
 - **Start with the system.**
 - **Accounts:** a label and a config folder each (several accounts via `CLAUDE_CONFIG_DIR`).
 - **Counter (optional):** a few numbers from your own server in the header, for example a site's visitors.
-- **System (optional, off by default):** CPU load with a tile per core, memory, an NVIDIA card's load and
-  temperature (through `nvidia-smi`), the CPU temperature where the system reports it, and a 2-minute graph in the details.
   cc-widget sends `GET <url>`, gets JSON back and reads the fields you list as dot paths, optionally named (`today=visitors.today`). An optional
   token is kept in the system keychain; it is fetched every N minutes (5 by default). With a *pass URL*, the token is
   first swapped there for a short-lived pass, reused for 50 minutes
   (`{"pass": "…"}`).
+- **System (optional, off by default):** CPU load with a tile per core, memory, an NVIDIA card's load and
+  temperature (through `nvidia-smi`), the CPU temperature where the system reports it, and a 2-minute graph in the details.
+- **Another machine (optional, off by default):** a home server where Claude runs unattended, as a group of its own
+  under your sessions: its Claude runs (working first, then the latest) and its load drawn like *System*. Every 4 s
+  cc-widget GETs two URLs with the counter's token:
+  - the load: `{"threads": [12, 3, …], "cores": 12, "memUsed": bytes, "memTotal": bytes, "gpu": {"name", "load",
+    "temp", "memUsedMb", "memTotalMb"} | null}`;
+  - the runs (through the pass URL, if set): `{"runs": [{"id", "status": "RUNNING" | "DONE" | "ERROR", "title",
+    "prompt", "startedAt", "finishedAt", "origin"}, …]}`, newest first.
+
+  Its working runs count in the header's "working".
 
 Settings are kept in `settings.json` in the app's config folder:
 
@@ -84,9 +93,10 @@ Settings are kept in `settings.json` in the app's config folder:
 ## How it works, and what it does not do
 
 - The session list is read from `~/.claude*/sessions/*.json`. Claude Code keeps one file per running session there,
-  with its status (`busy` / `idle`). This is Claude Code's **internal** format, not a public API. If an update changes
+  with its status (`busy` / `idle`; `shell` = the turn is over but a background command still runs — shown as idle). This is Claude Code's **internal** format, not a public API. If an update changes
   it, the list goes empty until cc-widget is updated. Nothing else breaks.
-- cc-widget reads local files only. The one network call is the optional counter, to the address you enter.
+- cc-widget reads local files only. Its network calls are the optional counter and the optional other machine, to the
+  addresses you enter.
 - Bringing up a session's window: Windows finds the window of the terminal / IDE above the session's process; macOS
   asks System Events to bring that app to the front (macOS may ask for permission once); Linux uses `xdotool` or
   `wmctrl` if installed (X11; Wayland doesn't allow it).
