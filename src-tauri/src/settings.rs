@@ -81,6 +81,9 @@ pub struct Remote {
     pub color: String,
     pub host_url: String,
     pub runs_url: String,
+    /// the session hub (be-claude-bridge /api/admin/hub/sessions): which of this machine's sessions wait for a
+    /// permission or an answer — the local session files don't say (through the pass URL)
+    pub hub_url: String,
     pub pass_url: String,
 }
 

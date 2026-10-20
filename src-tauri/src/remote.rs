@@ -111,6 +111,34 @@ fn runs_of(body: &Value, max: usize) -> Vec<Run> {
     busy.into_iter().chain(over).take(max).collect()
 }
 
+/// A session the hub says waits for the owner: Claude Code's session id and what it asks (none for a redacted account).
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Waiting {
+    pub session_id: String,
+    pub reason: Option<String>,
+}
+
+/// the hub's sessions in WAITING (format: [{"sessionId", "status", "waitingReason", …}])
+fn waiting_of(body: &Value) -> Vec<Waiting> {
+    body.as_array()
+        .map(|a| a.as_slice())
+        .unwrap_or_default()
+        .iter()
+        .filter(|s| s.get("status").and_then(Value::as_str) == Some("WAITING"))
+        .filter_map(|s| {
+            Some(Waiting {
+                session_id: s.get("sessionId")?.as_str()?.to_string(),
+                reason: s.get("waitingReason").and_then(Value::as_str).map(str::to_string),
+            })
+        })
+        .collect()
+}
+
+pub async fn waiting(remote: &Remote) -> Result<Vec<Waiting>, String> {
+    Ok(waiting_of(&counter::get(&remote.hub_url, &remote.pass_url).await?))
+}
+
 pub async fn runs(remote: &Remote) -> Result<Vec<Run>, String> {
     Ok(runs_of(&counter::get(&remote.runs_url, &remote.pass_url).await?, 4))
 }
@@ -132,6 +160,20 @@ mod tests {
         // no GPU, cores unknown: a column per thread
         let s = stats(serde_json::from_value(json!({"threads": [5, 6, 7], "memUsed": 1, "memTotal": 2, "gpu": null})).unwrap());
         assert_eq!((s.per_core, s.cores.len()), (1, 3));
+    }
+
+    #[test]
+    fn the_hub_names_the_waiting_sessions() {
+        let body = json!([
+            {"sessionId": "a", "status": "WAITING", "waitingReason": "Claude needs your permission to use Bash"},
+            {"sessionId": "b", "status": "BUSY"},
+            {"sessionId": "c", "status": "WAITING", "waitingReason": null},
+        ]);
+        assert_eq!(waiting_of(&body), vec![
+            Waiting { session_id: "a".into(), reason: Some("Claude needs your permission to use Bash".into()) },
+            Waiting { session_id: "c".into(), reason: None },
+        ]);
+        assert!(waiting_of(&json!({})).is_empty());
     }
 
     #[test]

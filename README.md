@@ -83,6 +83,10 @@ Everything is in ⚙:
     "prompt", "startedAt", "finishedAt", "origin"}, …]}`, newest first.
 
   Its working runs count in the header's "working".
+  - optionally a session hub (through the pass URL): `[{"sessionId", "status": "WAITING" | …, "waitingReason"}]` —
+    a session of this machine the hub says waits (a permission prompt, a question) shows as *needs you* with what it
+    asks. The local session files don't tell that apart from working. Your Claude Code sessions report to such a
+    hub through hooks (be-claude-bridge's `POST /api/hub/event`).
 
 Settings are kept in `settings.json` in the app's config folder:
 

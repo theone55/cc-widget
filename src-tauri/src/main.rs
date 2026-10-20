@@ -145,6 +145,16 @@ async fn remote_runs(state: tauri::State<'_, AppState>) -> Result<Vec<remote::Ru
     remote::runs(&remote).await
 }
 
+/// Which of this machine's sessions the session hub says wait for the owner (a permission, a question).
+#[tauri::command]
+async fn remote_waiting(state: tauri::State<'_, AppState>) -> Result<Vec<remote::Waiting>, String> {
+    let remote = current(&state).remote;
+    if !remote.enabled || remote.hub_url.trim().is_empty() {
+        return Err("off".into());
+    }
+    remote::waiting(&remote).await
+}
+
 #[tauri::command]
 fn counter_has_token() -> bool {
     counter::token().is_some()
@@ -205,6 +215,7 @@ fn main() {
             system_stats,
             remote_host,
             remote_runs,
+            remote_waiting,
         ])
         .run(tauri::generate_context!())
         .expect("error while running cc-widget");

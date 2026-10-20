@@ -24,7 +24,10 @@ const folder = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || p
 // A session "waits" when its turn is over (idle) and you haven't clicked it since: the click is the "seen".
 // "shell": the turn is over but a background command still runs (a dev server, a watcher) — the turn is yours like idle;
 // counting it as working left finished sessions "working" for hours (owner 2026-10-20)
-const state = (s) => s.status === 'busy' ? 'busy'
+// the session hub knows what the files don't: a session that waits for a permission or an answer (settings.remote.hubUrl)
+let hubWaiting = {}       // sessionId → what it asks ('' when the hub keeps no text, e.g. a work account)
+const state = (s) => s.sessionId in hubWaiting ? 'wait'
+  : s.status === 'busy' ? 'busy'
   : s.status === 'idle' || s.status === 'shell' ? ((seen[s.sessionId] || 0) >= s.since ? 'idle' : 'wait')
   : 'wait'                // anything else (a permission prompt…) needs you
 const ago = (ms) => {
@@ -114,7 +117,9 @@ function render() {
     const st = state(s)
     const ctx = s.context != null ? Math.round(s.context) : null
     const hint = ctx == null ? '' : ctx >= th.contextFull ? ' — ' + T.clear : ctx >= th.contextWarn ? ' — ' + T.compact : ''
-    const doing = `${st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free}${s.status === 'shell' ? ' · ' + T.background : ''} ${ago(s.since)}`
+    const asks = s.sessionId in hubWaiting
+    const doing = asks ? T.needsYou + (hubWaiting[s.sessionId] ? ': ' + hubWaiting[s.sessionId] : '')
+      : `${st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free}${s.status === 'shell' ? ' · ' + T.background : ''} ${ago(s.since)}`
     // the row's tooltip: what the details line and the hidden parts would say (chips and dots show no words)
     const info = [s.name || folder(s.cwd), s.cwd, doing + (s.kind === 'bg' ? ' · ' + T.bg : ''),
       ctx != null ? `${T.context} ${ctx}%${hint}` : '', many ? s.account : ''].filter(Boolean).join('\n')
@@ -224,14 +229,16 @@ let remoteTimer = null
 async function pollRemote() {
   clearTimeout(remoteTimer)
   const r = S.remote
-  if (!r.enabled) { remoteSys = remoteRuns = null; remoteErr = ''; rHist.cpu.length = rHist.mem.length = rHist.gpu.length = 0; drawRemote(); return }
-  const [h, runs] = await Promise.all([
+  if (!r.enabled) { remoteSys = remoteRuns = null; remoteErr = ''; hubWaiting = {}; rHist.cpu.length = rHist.mem.length = rHist.gpu.length = 0; drawRemote(); return }
+  const [h, runs, waits] = await Promise.all([
     r.hostUrl ? invoke('remote_host').then(v => [v]).catch(e => [null, e]) : [null],
     r.runsUrl ? invoke('remote_runs').then(v => [v]).catch(e => [null, e]) : [null],
+    r.hubUrl ? invoke('remote_waiting').then(v => [v]).catch(e => [null, e]) : [null],
   ])
+  hubWaiting = Object.fromEntries((waits[0] || []).map(w => [w.sessionId, w.reason || '']))
   remoteSys = h[0]
   remoteRuns = runs[0]
-  remoteErr = [h[1], runs[1]].filter(Boolean).map(String).join(' · ')
+  remoteErr = [h[1], runs[1], waits[1]].filter(Boolean).map(String).join(' · ')
   if (remoteSys) {
     rHist.cpu.push(remoteSys.cpu)
     rHist.mem.push(remoteSys.memTotal ? remoteSys.memUsed / remoteSys.memTotal * 100 : 0)
@@ -415,6 +422,7 @@ async function openSettings() {
     <label><span>${T.label}</span><input type="text" name="remoteLabel" value="${esc(S.remote.label)}" placeholder="server"><input type="color" name="remoteColor" value="${S.remote.color || PALETTE[S.accounts.length % PALETTE.length]}"></label>
     <div class="hint">${T.remoteHost}</div><input class="wide" type="text" name="remoteHost" value="${esc(S.remote.hostUrl)}" placeholder="http://…/api/v1/monitor/host">
     <div class="hint">${T.remoteRuns}</div><input class="wide" type="text" name="remoteRuns" value="${esc(S.remote.runsUrl)}" placeholder="http://…/api/admin/usage">
+    <div class="hint">${T.remoteHub}</div><input class="wide" type="text" name="remoteHub" value="${esc(S.remote.hubUrl || '')}" placeholder="http://…/api/admin/hub/sessions">
     <div class="hint">${T.passUrl}</div><input class="wide" type="text" name="remotePass" value="${esc(S.remote.passUrl)}">
     <h4>${T.system}</h4>
     ${check('sysEnabled', S.system.enabled, T.sysOn)}${check('sysThreads', S.system.threads, T.sysThreads)}${check('sysGpu', S.system.gpu, T.sysGpu)}
@@ -506,7 +514,7 @@ $('settings').addEventListener('submit', async e => {
       every: Math.min(1440, Math.max(1, Number(v('counterEvery').value) || 5)),
     },
     remote: {enabled: v('remoteEnabled').checked, label: v('remoteLabel').value.trim(), color: v('remoteColor').value,
-      hostUrl: v('remoteHost').value.trim(), runsUrl: v('remoteRuns').value.trim(), passUrl: v('remotePass').value.trim()},
+      hostUrl: v('remoteHost').value.trim(), runsUrl: v('remoteRuns').value.trim(), hubUrl: v('remoteHub').value.trim(), passUrl: v('remotePass').value.trim()},
     system: {enabled: v('sysEnabled').checked, threads: v('sysThreads').checked, gpu: v('sysGpu').checked},
   }
   await invoke('settings_set', {settings: next})

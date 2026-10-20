@@ -12,7 +12,7 @@
     showLimits: true, showContext: true, showBackground: true, expanded: q.get('open') === '1',
     counter: {enabled: false, label: '', url: '', passUrl: '', fields: [], every: 5},
     system: {enabled: false, threads: true, gpu: true},
-    remote: {enabled: q.get('remote') === '1', label: 'server', color: '', hostUrl: 'http://server/host', runsUrl: 'http://server/runs', passUrl: ''},
+    remote: {enabled: q.get('remote') === '1', label: 'server', color: '', hostUrl: 'http://server/host', runsUrl: 'http://server/runs', hubUrl: 'http://server/hub', passUrl: ''},
   }
   const s = (id, account, accountIndex, name, cwd, status, minAgo, context) =>
     ({account, accountIndex, pid: 1, sessionId: id, name, cwd, kind: 'interactive', status, since: now - minAgo * 60000, context})
@@ -34,6 +34,7 @@
     // the other machine (?remote=1)
     remote_host: () => ({cpu: 23, threads: [30, 12, 41, 8, 25, 19, 60, 5], cores: [21, 25, 22, 33], perCore: 2,
       memUsed: 21.4 * 2 ** 30, memTotal: 32 * 2 ** 30, cpuTemp: null, gpu: {name: 'NVIDIA GeForce RTX 3060', load: 4, memUsed: 1.1 * 2 ** 30, memTotal: 12 * 2 ** 30, temp: 41}}),
+    remote_waiting: () => [{sessionId: 'c', reason: 'Claude needs your permission to use Bash'}],
     remote_runs: () => [
       {id: 161, name: 'Morning digest', status: 'busy', startedAt: new Date(now - 2 * 60000).toISOString(), origin: 'SCHEDULE'},
       {id: 160, name: '[order #92] widget: remote sessions', status: 'done', startedAt: new Date(now - 40 * 60000).toISOString(), finishedAt: new Date(now - 12 * 60000).toISOString(), origin: 'ORDER'},
