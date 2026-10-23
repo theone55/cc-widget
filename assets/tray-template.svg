@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="6 14 88 76">
+  <!-- the macOS menu bar icon: icon.svg as a template image (black + alpha only; macOS paints it white on a dark bar,
+       black on a light one), bolder strokes and a tighter crop so it reads at 18 pt -->
+  <g fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 64a38 38 0 0 1 76 0" stroke-width="10" opacity=".35"/>
+    <path d="M12 64a38 38 0 0 1 61.2-30.1" stroke-width="10"/>
+    <path d="M50 64L67 43" stroke-width="9"/>
+    <path d="M26 83h48" stroke-width="8.5"/>
+  </g>
+  <circle cx="73.2" cy="33.9" r="8" fill="#000"/>
+  <circle cx="50" cy="64" r="10" fill="#000"/>
+</svg>
