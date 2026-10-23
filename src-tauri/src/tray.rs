@@ -34,14 +34,12 @@ pub fn create(app: &AppHandle, russian: bool) -> tauri::Result<()> {
         &[&toggle_item, &settings, &autosize, &PredefinedMenuItem::separator(app)?, &quit],
     )?;
     // macOS: a template image (black + alpha) that the menu bar tints like its other icons — the violet app icon
-    // was nearly invisible on a dark bar (tester, 2026-10-23); Windows / Linux keep the colored one
+    // was nearly invisible on a dark bar (tester, 2026-10-23); Windows / Linux: a filled colored disc, the thin line art
+    // got lost among the other tray icons too
     #[cfg(target_os = "macos")]
     let (icon, template) = (tauri::image::Image::from_bytes(include_bytes!("../icons/tray-template.png"))?, true);
     #[cfg(not(target_os = "macos"))]
-    let (icon, template) = (
-        app.default_window_icon().cloned().ok_or(tauri::Error::InvalidIcon(std::io::Error::other("no icon")))?,
-        false,
-    );
+    let (icon, template) = (tauri::image::Image::from_bytes(include_bytes!("../icons/tray-color.png"))?, false);
     TrayIconBuilder::with_id("main")
         .icon(icon)
         .icon_as_template(template)
