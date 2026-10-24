@@ -223,7 +223,7 @@ async function pollSystem() {
 }
 
 // ---- the other machine (settings.remote): its Claude runs and its load, a group of its own ----
-let remoteSys = null, remoteRuns = null, remoteErr = ''
+let remoteSys = null, remoteRuns = null, remoteChat = null, remoteErr = ''
 const rHist = {cpu: [], mem: [], gpu: []}
 let remoteTimer = null
 async function pollRemote() {
@@ -237,7 +237,8 @@ async function pollRemote() {
   ])
   hubWaiting = Object.fromEntries((waits[0] || []).map(w => [w.sessionId, w.reason || '']))
   remoteSys = h[0]
-  remoteRuns = runs[0]
+  remoteRuns = runs[0] ? runs[0].runs : null
+  remoteChat = runs[0] ? runs[0].chat : null
   remoteErr = [h[1], runs[1], waits[1]].filter(Boolean).map(String).join(' · ')
   if (remoteSys) {
     rHist.cpu.push(remoteSys.cpu)
@@ -248,7 +249,29 @@ async function pollRemote() {
   if (!editing) { drawRemote(); render() }
   remoteTimer = setTimeout(pollRemote, 4000)
 }
-const remoteBusy = () => (remoteRuns || []).filter(r => r.status === 'busy').length
+// a run marked running far past the bridge's time limit (chat 6 h, the rest 1 h) was cut off by a restart: not "working"
+const RUN_LIMIT = {CHAT: 6 * 3600e3}
+const stuck = (run) => run.status === 'busy' && Date.now() - (Date.parse(run.startedAt) || Date.now()) > (RUN_LIMIT[run.origin] || 3600e3) + 600e3
+const remoteBusy = () => (remoteRuns || []).filter(r => r.status === 'busy' && !stuck(r)).length
+const kTokens = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : Math.round(n / 1000) + 'k'
+const shortDate = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString(T === window.I18N.en ? 'en-GB' : 'ru-RU', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}) }
+// the bridge's chat conversation: how full and how old; the next chat message continues it until /new
+function chatRow(c) {
+  if (!c || !c.sessionId) return ''
+  const th = S.thresholds
+  const cold = c.cacheUntil && Date.parse(c.cacheUntil) < Date.now()
+  const pct = c.contextPercent
+  const size = c.contextTokens != null ? kTokens(c.contextTokens) + (pct != null ? ` (${pct}%)` : '') : '—'
+  const st = c.warn ? 'wait' : 'idle'
+  const info = [`${T.chat} · ${T.chatSince} ${shortDate(c.sessionSince)} · ${T.msgs(c.sessionMessages)}`,
+    c.model ? `${T.model}: ${c.model}` : '', c.contextTokens != null ? `${T.context}: ${c.contextTokens.toLocaleString()}` + (c.contextWindow ? ` / ${T.window} ${c.contextWindow.toLocaleString()}` : '') : '',
+    c.cacheUntil ? (cold ? T.chatCold : `${T.cacheUntil} ${shortDate(c.cacheUntil)}`) : '',
+    c.warn ? T.chatLong : '', T.chatNext].filter(Boolean).join('\n')
+  return `<div class="row ${st} chatrow" title="${esc(info)}">
+      <span class="dot ${st}"></span><span class="name">💬 ${esc(T.chat)} · ${esc(T.chatSince)} ${esc(shortDate(c.sessionSince))} · ${esc(T.msgs(c.sessionMessages))}</span>
+      ${cold ? `<span class="muted rago">${esc(T.cacheCold)}</span>` : ''}
+      <span class="ctxbar">${pct != null ? bar(pct, th.contextWarn, th.contextFull) : ''}<span class="pct">${esc(size)}</span></span></div>`
+}
 function drawRemote() {
   const el = $('remote')
   const r = S.remote
@@ -257,16 +280,22 @@ function drawRemote() {
   const since = (run) => Date.parse(run.status === 'busy' ? run.startedAt : run.finishedAt || run.startedAt) || Date.now()
   const label = r.label || T.remote
   const rows = (remoteRuns || []).map(run => {
-    const st = run.status === 'busy' ? 'busy' : run.status === 'error' ? 'wait' : 'idle'
-    const doing = `${run.status === 'busy' ? T.working : run.status === 'error' ? T.failed : T.finished} ${ago(since(run))}`
-    return `<div class="row ${st}" title="${esc([run.name, doing, run.origin].filter(Boolean).join('\n'))}">
-      <span class="dot ${st}"></span><span class="name">${esc(run.name || '#' + run.id)}</span><span class="muted rago">${ago(since(run))}</span></div>`
+    const cut = stuck(run)
+    const st = cut ? 'wait' : run.status === 'busy' ? 'busy' : run.status === 'error' ? 'wait' : 'idle'
+    const doing = cut ? T.stuckHint : `${run.status === 'busy' ? T.working : run.status === 'error' ? T.failed : T.finished} ${ago(since(run))}`
+    const origin = run.origin ? (T.origins[run.origin] || run.origin) : ''
+    return `<div class="row ${st}" title="${esc([run.name, origin, doing].filter(Boolean).join('\n'))}">
+      <span class="dot ${st}"></span><span class="name">${esc(run.name || '#' + run.id)}</span>` +
+      `<span class="muted rago">${cut ? esc(T.stuck) : (origin && run.origin !== 'CHAT' ? esc(origin) + ' · ' : '') + ago(since(run))}</span></div>`
   }).join('')
+  // collapsed (dense) layouts keep only the header: the chat's size goes there too
+  const chatHead = remoteChat && remoteChat.contextTokens != null ? ` · ${T.chat} ${kTokens(remoteChat.contextTokens)}` : ''
   el.innerHTML = `<div class="rhead"><span class="tag" id="rtag">${esc(label)}</span>` +
-    `<span class="muted">${remoteRuns ? (remoteBusy() ? T.busy(remoteBusy()) : T.nothingRuns) : ''}</span>` +
-    `${remoteErr ? `<span class="rerr" title="${esc(remoteErr)}">!</span>` : ''}</div>${rows}<div class="rsys"></div>`
+    `<span class="muted">${remoteRuns ? (remoteBusy() ? T.busy(remoteBusy()) : T.nothingRuns) + esc(chatHead) : ''}</span>` +
+    `${remoteErr ? `<span class="rerr" title="${esc(remoteErr)}">!</span>` : ''}</div>${chatRow(remoteChat)}${rows}<div class="rsys"></div>`
   const c = r.color || PALETTE[S.accounts.length % PALETTE.length]
   const tag = $('rtag'); tag.style.color = c; tag.style.borderColor = c
+  for (const i of el.querySelectorAll('.rhead ~ .row .bar i')) i.style.width = i.dataset.p + '%'
   drawSys(el.querySelector('.rsys'), remoteSys, rHist, true)
   if (el.offsetHeight !== before) fit()
 }

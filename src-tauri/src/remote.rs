@@ -6,7 +6,9 @@
 //!   {"threads": [12, 3, …], "cores": 12, "memUsed": bytes, "memTotal": bytes,
 //!    "gpu": {"name": "…", "load": 7, "temp": 50, "memUsedMb": 1000, "memTotalMb": 12000} | null}
 //! The runs' format (be-claude-bridge's /api/admin/usage): {"runs": [{"id", "status": RUNNING|DONE|ERROR|STOPPED,
-//!   "startedAt", "finishedAt", "title", "prompt", "origin"}, …]} — newest first.
+//!   "startedAt", "finishedAt", "title", "prompt", "origin"}, …]} — newest first; and "chat": {"sessionId", "model",
+//!   "contextTokens", "contextWindow", "contextPercent", "cacheUntil", "warn", "sessionSince", "sessionMessages"} | null —
+//!   the bridge's chat conversation, which the next chat message continues until /new.
 
 use crate::counter;
 use crate::settings::Remote;
@@ -139,8 +141,41 @@ pub async fn waiting(remote: &Remote) -> Result<Vec<Waiting>, String> {
     Ok(waiting_of(&counter::get(&remote.hub_url, &remote.pass_url).await?))
 }
 
-pub async fn runs(remote: &Remote) -> Result<Vec<Run>, String> {
-    Ok(runs_of(&counter::get(&remote.runs_url, &remote.pass_url).await?, 4))
+/// The bridge's chat session (the same /api/admin/usage, field `chat`): how full it is and how old — the next chat
+/// message continues it until /new. Absent on servers that don't send it.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Chat {
+    pub session_id: Option<String>,
+    pub model: Option<String>,
+    pub context_tokens: Option<u64>,
+    pub context_window: Option<u64>,
+    pub context_percent: Option<u32>,
+    pub cache_until: Option<String>,
+    #[serde(default)]
+    pub warn: bool,
+    pub session_since: Option<String>,
+    #[serde(default)]
+    pub session_messages: u64,
+}
+
+/// The runs and the chat's session, as the page shows them.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Runs {
+    pub runs: Vec<Run>,
+    pub chat: Option<Chat>,
+}
+
+/// the chat's session when there is one (a new conversation after /new has none yet)
+fn chat_of(body: &Value) -> Option<Chat> {
+    let chat: Chat = serde_json::from_value(body.get("chat")?.clone()).ok()?;
+    chat.session_id.as_ref()?;
+    Some(chat)
+}
+
+pub async fn runs(remote: &Remote) -> Result<Runs, String> {
+    let body = counter::get(&remote.runs_url, &remote.pass_url).await?;
+    Ok(Runs { runs: runs_of(&body, 4), chat: chat_of(&body) })
 }
 
 #[cfg(test)]
@@ -174,6 +209,19 @@ mod tests {
             Waiting { session_id: "c".into(), reason: None },
         ]);
         assert!(waiting_of(&json!({})).is_empty());
+    }
+
+    #[test]
+    fn the_chat_session_comes_with_the_runs() {
+        let body = json!({"runs": [], "chat": {"sessionId": "4c4c", "model": "sonnet", "contextTokens": 312000,
+            "contextWindow": 1000000, "contextPercent": 31, "contextAt": "2026-10-24T10:00:00Z",
+            "cacheUntil": "2026-10-24T11:00:00Z", "warn": true, "sessionSince": "2026-10-19T17:34:00Z", "sessionMessages": 21}});
+        let chat = chat_of(&body).unwrap();
+        assert_eq!((chat.context_tokens, chat.context_percent, chat.warn, chat.session_messages), (Some(312000), Some(31), true, 21));
+        // after /new: no session yet → no line; an older bridge without the field → none
+        assert!(chat_of(&json!({"chat": {"sessionId": null, "warn": false, "sessionMessages": 0}})).is_none());
+        assert!(chat_of(&json!({"runs": []})).is_none());
+        assert!(chat_of(&json!({"chat": null})).is_none());
     }
 
     #[test]

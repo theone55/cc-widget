@@ -135,9 +135,9 @@ async fn remote_host(state: tauri::State<'_, AppState>) -> Result<system::Stats,
     remote::host(&remote).await
 }
 
-/// The other machine's Claude runs: the running ones, then the latest.
+/// The other machine's Claude runs (the running ones, then the latest) and its chat session.
 #[tauri::command]
-async fn remote_runs(state: tauri::State<'_, AppState>) -> Result<Vec<remote::Run>, String> {
+async fn remote_runs(state: tauri::State<'_, AppState>) -> Result<remote::Runs, String> {
     let remote = current(&state).remote;
     if !remote.enabled || remote.runs_url.trim().is_empty() {
         return Err("off".into());
