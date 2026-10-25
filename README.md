@@ -58,6 +58,18 @@ If you already have a statusline script, you can instead have it write the numbe
 - `<config dir>/widget-limits.json` = `{"five_hour": …, "seven_day": …}`, which is `rate_limits` from the statusline input;
 - `<temp dir>/claude-ctx-<session_id>.json` = `{"used_pct": 42}`.
 
+### Claude's task list (optional)
+
+The **session-progress** plugin in this repository has Claude keep a task list with a rough percent per task while it
+works. The widget shows "2/5 · 47%" in the session's row, the task in progress under it and every task in the tooltip; in
+the terminal you get a line above the prompt and a status line entry. At the prompt of a Claude Code session:
+
+```
+/plugin install session-progress --marketplace theone55/cc-widget
+```
+
+Details: [plugins/session-progress](plugins/session-progress/README.md).
+
 ## Settings
 
 Everything is in ⚙:
