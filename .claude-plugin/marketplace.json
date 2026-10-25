@@ -1,0 +1,16 @@
+{
+  "name": "cc-widget",
+  "owner": {
+    "name": "theone55"
+  },
+  "plugins": [
+    {
+      "name": "session-progress",
+      "source": "./plugins/session-progress",
+      "description": "Claude's task list with a rough percent per task: above the prompt, in the status line and in cc-widget"
+    }
+  ],
+  "metadata": {
+    "description": "Claude Code plugins that go with cc-widget"
+  }
+}

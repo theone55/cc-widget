@@ -1,0 +1,23 @@
+{
+  "name": "session-progress",
+  "version": "0.1.0",
+  "description": "The session's task list with a rough percent per task: a band above the prompt, a status line entry and a JSON file for cc-widget",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Language",
+      "description": "The language of the band's labels (the task titles are whatever Claude writes)",
+      "default": "en",
+      "options": [
+        "en",
+        "ru"
+      ]
+    }
+  },
+  "license": "MIT",
+  "author": {
+    "name": "theone55"
+  },
+  "homepage": "https://github.com/theone55/cc-widget"
+}
