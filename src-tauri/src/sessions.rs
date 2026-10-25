@@ -36,6 +36,34 @@ pub struct Session {
     since: u64,
     /// how full the context window is, % — from the statusline's file
     context: Option<f64>,
+    /// the session's task list, if Claude keeps one (the session-progress mod)
+    progress: Option<Progress>,
+}
+
+/// `<config dir>/session-progress/<session id>.json`, written by the session-progress mod each time Claude
+/// updates its task list: every task with a rough percent done.
+#[derive(Serialize, Deserialize)]
+pub struct Progress {
+    #[serde(default)]
+    overall: u32,
+    #[serde(default)]
+    tasks: Vec<Task>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Task {
+    title: String,
+    percent: u32,
+    #[serde(default)]
+    active: bool,
+}
+
+fn progress(dir: &std::path::Path, session_id: &str) -> Option<Progress> {
+    if session_id.is_empty() {
+        return None;
+    }
+    let text = std::fs::read_to_string(dir.join("session-progress").join(format!("{session_id}.json"))).ok()?;
+    serde_json::from_str::<Progress>(&text).ok().filter(|p| !p.tasks.is_empty())
 }
 
 #[derive(Deserialize)]
@@ -74,6 +102,7 @@ pub fn read(accounts: &[Account]) -> Vec<Session> {
                 account_index: index,
                 pid: f.pid,
                 context: context_used(&session_id),
+                progress: progress(&dir, &session_id),
                 session_id,
                 name: f.name.unwrap_or_default(),
                 cwd: f.cwd.unwrap_or_default(),

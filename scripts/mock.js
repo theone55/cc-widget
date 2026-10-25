@@ -22,6 +22,12 @@
     s('c', 'work', 0, 'billing-service', '/home/me/work/billing', 'busy', 1, 72),
     s('d', 'work', 0, 'docs', '/home/me/work/docs', 'busy', 0, 12),
   ]
+  // the session-progress mod's task list on the busy billing session
+  sessions[2].progress = {overall: 55, tasks: [
+    {title: 'Read the invoice flow', percent: 100, active: false},
+    {title: 'Retry failed webhooks', percent: 60, active: true},
+    {title: 'Tests for the retry', percent: 5, active: false},
+  ]}
   const sec = Math.floor(now / 1000)
   const limits = [
     {account: 'work', accountIndex: 0, five_hour: {used_percentage: 35, resets_at: sec + 117 * 60}, seven_day: {used_percentage: 86, resets_at: sec + 25 * 3600}},

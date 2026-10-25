@@ -62,7 +62,7 @@ body.dense6 .lim .bar { display: none; }
 body.dense6 .lim .pct { width: auto; margin-right: 2px; }
 body.dense7 #system, body.dense7 .rsys, body.dense7 .row .rago { display: none; }
 body.dense7 .row { padding: 0 3px; gap: 0; }
-body.dense7 .row .name, body.dense7 .row .ctxbar { display: none; }
+body.dense7 .row .name, body.dense7 .row .ctxbar, body.dense5 .row .prog { display: none; }
 body.dense7 .row .dot { width: 10px; height: 10px; }
 body.dense8 #limits { display: none; }
 
@@ -168,6 +168,8 @@ body.dense1 .rsys .scards { grid-auto-rows: minmax(40px, 1fr); }
 .row.acc:hover { background: color-mix(in srgb, var(--acc) 27%, transparent); }
 .row .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row.wait .name { color: var(--warn); font-weight: 600; }
+.row .prog { flex: none; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sub.task { margin-top: -3px; }
 .row .ctxbar { width: 64px; flex: none; display: flex; align-items: center; gap: 4px; }
 .letter { font-size: 10px; flex: none; min-width: 12px; text-align: center; color: var(--muted); }
 .sub { color: var(--muted); font-size: 10px; margin: -2px 0 3px 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

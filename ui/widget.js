@@ -117,20 +117,27 @@ function render() {
     const st = state(s)
     const ctx = s.context != null ? Math.round(s.context) : null
     const hint = ctx == null ? '' : ctx >= th.contextFull ? ' — ' + T.clear : ctx >= th.contextWarn ? ' — ' + T.compact : ''
+    // the session's task list (the session-progress mod): done / all, overall %, the task in progress
+    const p = s.progress && { ...s.progress, done: s.progress.tasks.filter(t => t.percent >= 100).length }
+    const now = p && (p.tasks.find(t => t.active && t.percent < 100) || p.tasks.find(t => t.percent < 100))
     const asks = s.sessionId in hubWaiting
     const doing = asks ? T.needsYou + (hubWaiting[s.sessionId] ? ': ' + hubWaiting[s.sessionId] : '')
       : `${st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free}${s.status === 'shell' ? ' · ' + T.background : ''} ${ago(s.since)}`
     // the row's tooltip: what the details line and the hidden parts would say (chips and dots show no words)
     const info = [s.name || folder(s.cwd), s.cwd, doing + (s.kind === 'bg' ? ' · ' + T.bg : ''),
-      ctx != null ? `${T.context} ${ctx}%${hint}` : '', many ? s.account : ''].filter(Boolean).join('\n')
+      ctx != null ? `${T.context} ${ctx}%${hint}` : '', many ? s.account : '',
+      ...(p ? [`${T.tasks} ${p.done}/${p.tasks.length} · ${p.overall}%`,
+        ...p.tasks.map(t => `${t.percent >= 100 ? '✓' : t.active ? '▶' : '·'} ${t.percent}% ${t.title}`)] : [])].filter(Boolean).join('\n')
     return `<div class="row ${st}${many ? ' acc' : ''}" data-id="${esc(s.sessionId)}"${many ? ` data-acc="${s.accountIndex}"` : ''} title="${esc(info)}">
       <span class="dot ${st}"></span>
       <span class="name">${esc(s.name || folder(s.cwd))}</span>
+      ${p ? `<span class="prog">${p.done}/${p.tasks.length} · ${p.overall}%</span>` : ''}
       ${many ? `<span class="letter" data-acc="${s.accountIndex}">${esc((s.account || '?').slice(0, 1).toUpperCase())}</span>` : ''}
       ${S.showContext ? `<span class="ctxbar">${ctx != null
         ? bar(ctx, th.contextWarn, th.contextFull) + `<span class="pct">${ctx}%</span>` : '<span class="muted">—</span>'}</span>` : ''}
     </div>
-    <div class="sub details">${esc(folder(s.cwd))}${s.kind === 'bg' ? ' · ' + T.bg : ''} · ${doing}${hint}</div>`
+    <div class="sub details">${esc(folder(s.cwd))}${s.kind === 'bg' ? ' · ' + T.bg : ''} · ${doing}${hint}</div>
+    ${now ? `<div class="sub details task">▶ ${now.percent}% ${esc(now.title)}</div>` : ''}`
   }).join('') : `<div class="empty">${T.noSessions}</div>`
 
   $('counter').innerHTML = !S.counter.enabled ? '' : Array.isArray(counter)
