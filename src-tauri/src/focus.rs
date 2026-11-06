@@ -236,26 +236,37 @@ fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-/// A config dir that can't break out of the quoting below (a Windows path never holds `"`; `%` would expand in cmd).
+/// A config dir that goes into the line UNQUOTED (Windows Terminal drops the quotes it is given): nothing cmd or
+/// wt would read as syntax — `"` `%` `&` `|` `<` `>` `^` `;` (wt's own separator), no quote or line break.
 fn valid_dir(dir: &str) -> bool {
-    !dir.contains(['"', '%', '\'', '\n', '\r', '\0'])
+    !dir.contains(['"', '%', '&', '|', '<', '>', '^', ';', '\'', '\n', '\r', '\0'])
 }
 
-/// cmd.exe line: the account's config dir in the environment of this window only, then attach.
-#[cfg_attr(not(windows), allow(dead_code))]
-fn windows_line(id: &str, dir: &str) -> String {
-    if dir.is_empty() {
-        format!("claude attach {id}")
+/// Claude Code's default account (`~/.claude`) must run WITHOUT CLAUDE_CONFIG_DIR: its settings file is
+/// `~/.claude.json` in the home folder, and with the variable set Claude looks for `~/.claude/.claude.json` instead
+/// ("configuration file not found"). Empty = the default account.
+fn env_dir(config_dir: &str) -> String {
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_default();
+    let norm = |p: &str| p.replace('\\', "/").trim_end_matches('/').to_lowercase();
+    if config_dir.is_empty() || (!home.is_empty() && norm(config_dir) == norm(&format!("{home}/.claude"))) {
+        String::new()
     } else {
-        format!("set \"CLAUDE_CONFIG_DIR={dir}\" && claude attach {id}")
+        config_dir.to_string()
     }
 }
 
-/// POSIX shell line, the dir single-quoted.
+/// cmd.exe line: this window's CLAUDE_CONFIG_DIR set (or removed for the default account), then attach.
+/// No quotes and no space before `&&`: `set X=a && …` would keep the trailing space in the value.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn windows_line(id: &str, dir: &str) -> String {
+    format!("set CLAUDE_CONFIG_DIR={dir}&& claude attach {id}")
+}
+
+/// POSIX shell line, the dir single-quoted; the default account unsets the variable.
 #[cfg_attr(windows, allow(dead_code))]
 fn sh_line(id: &str, dir: &str) -> String {
     if dir.is_empty() {
-        format!("claude attach {id}")
+        format!("unset CLAUDE_CONFIG_DIR; claude attach {id}")
     } else {
         format!("CLAUDE_CONFIG_DIR='{dir}' claude attach {id}")
     }
@@ -269,7 +280,7 @@ pub fn attach(id: &str, config_dir: &str) -> Result<(), String> {
     if !valid_dir(config_dir) {
         return Err("bad config dir".into());
     }
-    spawn_terminal(id, config_dir)
+    spawn_terminal(id, &env_dir(config_dir))
 }
 
 #[cfg(windows)]
@@ -284,8 +295,9 @@ fn spawn_terminal(id: &str, dir: &str) -> Result<(), String> {
     if wt.is_ok() {
         return Ok(());
     }
+    // no Windows Terminal: cmd in a console of its own (not `cmd /c start …`: the outer cmd would split at `&&`)
     Command::new("cmd")
-        .raw_arg(format!("/c start \"cc-widget attach\" cmd /k {line}"))
+        .raw_arg(format!("/k {line}"))
         .creation_flags(CREATE_NEW_CONSOLE)
         .spawn()
         .map(|_| ())
@@ -322,10 +334,17 @@ mod tests {
         assert!(valid_dir(r"C:\Users\me\.claude-work") && !valid_dir("C:\\a\"b") && !valid_dir("%PATH%"));
         assert_eq!(
             windows_line("0c001924", r"C:\Users\me\.claude-work"),
-            r#"set "CLAUDE_CONFIG_DIR=C:\Users\me\.claude-work" && claude attach 0c001924"#
+            r"set CLAUDE_CONFIG_DIR=C:\Users\me\.claude-work&& claude attach 0c001924"
         );
-        assert_eq!(sh_line("0c001924", "/home/me/.claude"), "CLAUDE_CONFIG_DIR='/home/me/.claude' claude attach 0c001924");
-        assert_eq!(sh_line("x", ""), "claude attach x");
+        // the default account: the variable removed, not set (it would point Claude at ~/.claude/.claude.json)
+        assert_eq!(windows_line("x", ""), "set CLAUDE_CONFIG_DIR=&& claude attach x");
+        assert_eq!(sh_line("0c001924", "/home/me/.claude-work"), "CLAUDE_CONFIG_DIR='/home/me/.claude-work' claude attach 0c001924");
+        assert_eq!(sh_line("x", ""), "unset CLAUDE_CONFIG_DIR; claude attach x");
+        assert!(!valid_dir(r"C:\a&calc") && !valid_dir("C:\\a;b") && !valid_dir("a^b"));
+        let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap();
+        assert_eq!(env_dir(&format!("{home}/.claude")), "");
+        assert_eq!(env_dir(&format!("{home}\\.claude\\")), "");
+        assert_eq!(env_dir(&format!("{home}/.claude-own")), format!("{home}/.claude-own"));
     }
 
     #[test]
