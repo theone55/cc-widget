@@ -53,10 +53,24 @@ const statusText = (list: readonly Task[]) => {
 }
 
 // For cc-widget: <config dir>/session-progress/<session id>.json
-const progressFile = async ($: EngineInterface) => {
+// A subagent's own list (its calls run inside the same session) goes to <session id>/agent-<agent id>.json so it never
+// replaces the main session's file.
+const progressFile = async ($: EngineInterface, agentId?: string) => {
   const dir = (await $.env.get('CLAUDE_CONFIG_DIR'))
     ?? `${(await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME')) ?? '.'}/.claude`
-  return `${dir.replace(/\\/g, '/')}/session-progress/${await $.session.id()}.json`
+  const base = `${dir.replace(/\\/g, '/')}/session-progress/${await $.session.id()}`
+  return agentId ? `${base}/agent-${agentId}.json` : `${base}.json`
+}
+
+const publishAgent = async ($: EngineInterface, agentId: string, list: readonly Task[]) => {
+  const doc = {
+    sessionId: await $.session.id(),
+    agentId,
+    updatedAt: new Date(await $.clock.now()).toISOString(),
+    overall: overall(list),
+    tasks: list,
+  }
+  await $.fs.write(await progressFile($, agentId), JSON.stringify(doc, null, 2))
 }
 
 const publish = async ($: EngineInterface, list: readonly Task[]) => {
@@ -116,6 +130,12 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: TOOL }, async ($, e) => {
     const list = parse((e as unknown as Record<string, unknown>).tasks)
+    // a subagent's call: its own file only, not the main session's list / band / status line
+    const agentId = (e as unknown as { agentId?: unknown }).agentId
+    if (typeof agentId === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(agentId)) {
+      await publishAgent($, agentId, list)
+      return { result: list.length ? `Shown for this subagent: ${overall(list)}% overall.` : 'Cleared.' }
+    }
     await update($, tasks, () => list)
     await publish($, list)
     const done = list.filter(t => t.percent >= 100).length

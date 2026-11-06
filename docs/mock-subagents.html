@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- Mock-up of subagent rows (open it in a browser): the real ui/ with scripts/mock.js, ?sa=1&bg=1&open=1 is applied by default.
+     Try ?theme=light  ?lang=ru  ?level=2 (denser layouts hide the subagents). -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>cc-widget — subagents mock-up</title>
+<link rel="stylesheet" href="../ui/widget.css">
+<style>
+  html, body { min-height: 100%; }
+  body { margin: 0; padding: 24px; box-sizing: border-box; min-height: 100vh; background: linear-gradient(135deg, #2b3a55, #5b3f6b); }
+  body.lightbg { background: linear-gradient(135deg, #dfe7f3, #efe2ef); }
+  #box { width: 340px; height: auto; }
+</style>
+<script>
+  // defaults for the mock: subagents + a background session + the details open, in Russian
+  const q = new URLSearchParams(location.search)
+  for (const [k, v] of [['sa', '1'], ['bg', '1'], ['open', '1'], ['lang', 'ru']]) if (!q.has(k)) q.set(k, v)
+  history.replaceState(null, '', '?' + q.toString())
+</script>
+</head>
+<body>
+<div id="box">
+  <div id="head" data-tauri-drag-region></div>
+  <div id="view">
+    <div id="limits" class="section"></div>
+    <div id="list" class="section"></div>
+    <div id="system" class="section"></div>
+    <div id="remote" class="section"></div>
+    <div id="counter" class="section details"></div>
+  </div>
+  <form id="settings" class="section" hidden></form>
+</div>
+<script src="../scripts/mock.js"></script>
+<script src="../ui/i18n.js"></script>
+<script>if (location.search.includes('theme=light')) document.body.classList.add('lightbg')</script>
+<script src="../ui/widget.js"></script>
+</body>
+</html>

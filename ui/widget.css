@@ -216,3 +216,16 @@ body.open .sub.details { display: block; }
 ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 /* a background session started by the row above it (its parent) */
 .row.child { margin-left: 12px; }
+/* a subagent (Agent tool) under its session: violet, indented, a ◆ instead of ↳ — never confused with a delegate */
+:root { --sa: #9b6bff; }
+.sarow { margin-left: 14px; min-height: 17px; border-left: 2px solid var(--sa); border-radius: 0 5px 5px 0; padding-left: 6px; font-size: 11px; }
+.sarow.done { opacity: 0.55; }
+.samark { flex: none; width: 8px; font-size: 9px; line-height: 8px; text-align: center; color: var(--sa); }
+.sarow.run .samark { animation: pulse 1.6s steps(2, jump-none) infinite; }
+.chip.sa { color: var(--sa); border-color: var(--sa); }
+.sarow .ctxbar { width: 46px; }
+.bar.sa { height: 4px; }
+.bar.sa i { background: var(--sa); }
+.bar.sa.idle i { width: 30% !important; opacity: 0.5; }
+.sub.sa { margin-left: 34px; }
+body.dense3 .sarow, body.dense5 .sarow, body.dense7 .sarow { display: none; }

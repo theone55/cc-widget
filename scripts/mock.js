@@ -32,6 +32,22 @@
     {title: 'Retry failed webhooks', percent: 60, active: true},
     {title: 'Tests for the retry', percent: 5, active: false},
   ]}
+  // the model shown in every row's hover ("model: opus 5.5")
+  ;['opus 5.5', 'opus 5.5', 'sonnet 5.5', 'haiku 5.5', 'sonnet 5.5', 'opus 5.5', 'opus 5.5'].forEach((m, i) => { if (sessions[i]) sessions[i].model = m })
+  // subagents (?sa=1): under the busy billing session — one with its own task list, a background one without, a finished one;
+  // and one under the bg session when ?bg=1 too
+  if (q.get('sa') === '1') {
+    sessions[2].subagents = [
+      {id: 'a1', agentType: 'worker', description: 'Port the retry tests', running: true, background: false, model: 'sonnet 5.5', since: now - 90000,
+        progress: {overall: 47, tasks: [
+          {title: 'Read existing tests', percent: 100, active: false}, {title: 'Write 3 retry tests', percent: 40, active: true},
+          {title: 'Run the suite', percent: 0, active: false}, {title: 'Fix flakes', percent: 0, active: false}, {title: 'Report', percent: 0, active: false}]}},
+      {id: 'a2', agentType: 'researcher', description: 'Audit webhook signature checks', running: true, background: true, model: 'opus 5.5', since: now - 5 * 60000, progress: null},
+      {id: 'a3', agentType: 'scout', description: 'Find callers of InvoiceService', running: false, background: false, model: 'haiku 5.5', since: now - 2 * 60000, progress: null},
+    ]
+    sessions[0].subagents = [{id: 'a4', agentType: 'general-purpose', description: 'Review the gateway diff', running: true, background: true, model: 'sonnet 5.5', since: now - 40000,
+      progress: {overall: 80, tasks: [{title: 'Read diff', percent: 100, active: false}, {title: 'Check auth paths', percent: 60, active: true}]}}]
+  }
   const sec = Math.floor(now / 1000)
   const limits = [
     {account: 'work', accountIndex: 0, five_hour: {used_percentage: 35, resets_at: sec + 117 * 60}, seven_day: {used_percentage: 86, resets_at: sec + 25 * 3600}},

@@ -130,6 +130,7 @@ function render() {
       : `${st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free}${s.status === 'shell' ? ' · ' + T.background : ''} ${ago(s.since)}`
     // the row's tooltip: what the details line and the hidden parts would say (chips and dots show no words)
     let info = [s.name || folder(s.cwd), s.cwd, doing + (s.kind === 'bg' ? ' · ' + T.bg : ''),
+      s.model ? `${T.model}: ${s.model}` : '',
       ctx != null ? `${T.context} ${ctx}%${hint}` : '', many ? s.account : '',
       s.kind === 'bg' ? T.attachHint : '',
       ...(p ? [`${T.tasks} ${p.done}/${p.tasks.length} · ${p.overall}%`,
@@ -147,7 +148,8 @@ function render() {
         ? bar(ctx, th.contextWarn, th.contextFull) + `<span class="pct">${ctx}%</span>` : '<span class="muted">—</span>'}</span>` : ''}
     </div>
     <div class="sub details">${esc(folder(s.cwd))}${s.kind === 'bg' ? ' · ' + T.bg : ''} · ${doing}${hint}</div>
-    ${now ? `<div class="sub details task">▶ ${now.percent}% ${esc(now.title)}</div>` : ''}`
+    ${now ? `<div class="sub details task">▶ ${now.percent}% ${esc(now.title)}</div>` : ''}
+    ${(S.showSubagents !== false && s.subagents || []).map(subagentRow).join('')}`
   }).join('') : `<div class="empty">${T.noSessions}</div>`
 
   $('counter').innerHTML = !S.counter.enabled ? '' : Array.isArray(counter)
@@ -158,6 +160,26 @@ function render() {
   for (const i of document.querySelectorAll('.bar i')) i.style.width = i.dataset.p + '%'
   paintAccounts($('view'))
   fit()
+}
+
+// a subagent of a session (Agent tool): a violet ◆ + «суб» chip, its own task list as a thin violet bar
+// (an agent with no list yet just pulses while it runs); not clickable — there is nothing to attach to
+function subagentRow(a) {
+  const p = a.progress && { ...a.progress, done: a.progress.tasks.filter(t => t.percent >= 100).length }
+  const now = p && (p.tasks.find(t => t.active && t.percent < 100) || p.tasks.find(t => t.percent < 100))
+  const pct = a.running ? (p ? p.overall : null) : 100
+  const info = [a.description, a.agentType + (a.background ? ' · ' + T.background2 : ''), a.model ? `${T.model}: ${a.model}` : '',
+    `${a.running ? T.working : T.subDone} ${ago(a.since)}`,
+    ...(p ? [`${T.tasks} ${p.done}/${p.tasks.length} · ${p.overall}%`,
+      ...p.tasks.map(t => `${t.percent >= 100 ? '✓' : t.active ? '▶' : '·'} ${t.percent}% ${t.title}`)] : [])].filter(Boolean).join('\n')
+  return `<div class="row sarow ${a.running ? 'run' : 'done'}" title="${esc(info)}">
+      <span class="samark">${a.running ? '◆' : '✓'}</span>
+      <span class="name">${esc(a.description || a.agentType)}</span>
+      <span class="chip sa">${T.sub}</span>
+      ${p ? `<span class="prog">${a.running ? `${p.done}/${p.tasks.length} · ${p.overall}%` : '✓'}</span>` : ''}
+      <span class="ctxbar"><span class="bar sa${pct == null ? ' idle' : ''}"><i data-p="${pct ?? 100}"></i></span></span>
+    </div>
+    ${a.running && now ? `<div class="sub details task sa">▶ ${now.percent}% ${esc(now.title)}</div>` : ''}`
 }
 
 // the counter's tooltip: every field with its name
