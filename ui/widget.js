@@ -125,7 +125,7 @@ function render() {
     const p = s.progress && { ...s.progress, done: s.progress.tasks.filter(t => t.percent >= 100).length }
     const now = p && (p.tasks.find(t => t.active && t.percent < 100) || p.tasks.find(t => t.percent < 100))
     const asks = s.sessionId in hubWaiting
-    const doing = st === 'blocked' ? T.needsPermission
+    const doing = st === 'blocked' ? (s.needs ? `${T.needsAnswer}: ${s.needs}` : T.needsPermission)
       : asks ? T.needsYou + (hubWaiting[s.sessionId] ? ': ' + hubWaiting[s.sessionId] : '')
       : `${st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free}${s.status === 'shell' ? ' · ' + T.background : ''} ${ago(s.since)}`
     // the row's tooltip: what the details line and the hidden parts would say (chips and dots show no words)

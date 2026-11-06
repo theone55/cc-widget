@@ -42,6 +42,8 @@ pub struct Session {
     since: u64,
     /// a bg session blocked by a permission prompt nobody sees (jobs/<id>/state.json)
     blocked: bool,
+    /// the question a bg session ended its turn with (state "blocked" + needs); `blocked` is true then too
+    needs: Option<String>,
     /// the session that started this bg one, when its launcher left jobs/<id>/parent.json ({"sessionId": "..."})
     parent: Option<String>,
     /// how full the context window is, % — from the statusline's file
@@ -78,10 +80,12 @@ fn progress(dir: &std::path::Path, session_id: &str) -> Option<Progress> {
 
 /// `<config dir>/jobs/<job id>/state.json` of a background job: while a permission prompt nobody sees blocks it,
 /// it holds `"state":"working","tempo":"blocked"`. Internal file like the session's, read for bg sessions only.
+/// The second kind of waiting: `"state":"blocked"` + `"needs":"<question>"` — the session ended its turn with a question.
 #[derive(Deserialize, Default)]
 struct JobState {
     state: Option<String>,
     tempo: Option<String>,
+    needs: Option<String>,
 }
 
 fn parse_job_state(text: &str) -> Option<JobState> {
@@ -92,15 +96,24 @@ fn is_blocked(s: &JobState) -> bool {
     s.state.as_deref() == Some("working") && s.tempo.as_deref() == Some("blocked")
 }
 
-/// true when the job waits on a permission prompt; a missing / unreadable file or odd id = false
-fn job_blocked(dir: &std::path::Path, job_id: &str) -> bool {
+/// the question a `state:"blocked"` job waits to have answered (cut to 300 chars); none for any other state
+fn question(s: &JobState) -> Option<String> {
+    if s.state.as_deref() != Some("blocked") {
+        return None;
+    }
+    let n = s.needs.as_deref()?.trim();
+    (!n.is_empty()).then(|| n.chars().take(300).collect())
+}
+
+/// (blocked by a permission prompt, waits for an answer: the question) of a job; a missing / unreadable file or odd id = nothing
+fn job_wait(dir: &std::path::Path, job_id: &str) -> (bool, Option<String>) {
     if job_id.is_empty() || job_id.contains(['/', '\\']) || job_id.contains("..") {
-        return false;
+        return (false, None);
     }
     std::fs::read_to_string(dir.join("jobs").join(job_id).join("state.json"))
         .ok()
         .and_then(|t| parse_job_state(&t))
-        .is_some_and(|s| is_blocked(&s))
+        .map_or((false, None), |s| (is_blocked(&s), question(&s)))
 }
 
 /// `<config dir>/jobs/<job id>/parent.json` — Claude Code doesn't record who started a bg job; a launcher that knows
@@ -151,11 +164,17 @@ pub fn read(accounts: &[Account]) -> Vec<Session> {
             }
             let session_id = f.session_id.unwrap_or_default();
             let job_id = f.job_id.filter(|j| !j.is_empty());
-            let blocked = f.kind.as_deref() == Some("bg") && job_id.as_deref().is_some_and(|j| job_blocked(&dir, j));
+            let (permission, needs) = if f.kind.as_deref() == Some("bg") {
+                job_id.as_deref().map_or((false, None), |j| job_wait(&dir, j))
+            } else {
+                (false, None)
+            };
+            let blocked = permission || needs.is_some();
             let parent = if f.kind.as_deref() == Some("bg") { job_id.as_deref().and_then(|j| job_parent(&dir, j)) } else { None };
             let attach_id = job_id.unwrap_or_else(|| session_id.clone());
             out.push(Session {
                 blocked,
+                needs,
                 parent,
                 attach_id,
                 config_dir: dir.to_string_lossy().into_owned(),
@@ -250,14 +269,28 @@ mod tests {
     }
 
     #[test]
+    fn job_state_question() {
+        let q = |t: &str| question(&parse_job_state(t).unwrap());
+        assert_eq!(q(r#"{"state":"blocked","needs":"which DB?"}"#).as_deref(), Some("which DB?"));
+        assert_eq!(q(r#"{"state":"blocked","needs":"  "}"#), None);
+        assert_eq!(q(r#"{"state":"blocked"}"#), None);
+        assert_eq!(q(r#"{"state":"working","needs":"x"}"#), None);
+        assert_eq!(q(&format!(r#"{{"state":"blocked","needs":"{}"}}"#, "я".repeat(500))).unwrap().chars().count(), 300);
+        // a question is not a permission prompt
+        assert!(!is_blocked(&parse_job_state(r#"{"state":"blocked","needs":"x"}"#).unwrap()));
+    }
+
+    #[test]
     fn job_state_from_disk_and_missing() {
         let dir = std::env::temp_dir().join(format!("cc-widget-jobs-{}", std::process::id()));
         let job = dir.join("jobs").join("abc12345");
         std::fs::create_dir_all(&job).unwrap();
         std::fs::write(job.join("state.json"), r#"{"state":"working","tempo":"blocked"}"#).unwrap();
-        assert!(job_blocked(&dir, "abc12345"));
-        assert!(!job_blocked(&dir, "nofile"));
-        assert!(!job_blocked(&dir, "../abc12345"));
+        assert_eq!(job_wait(&dir, "abc12345"), (true, None));
+        assert_eq!(job_wait(&dir, "nofile"), (false, None));
+        assert_eq!(job_wait(&dir, "../abc12345"), (false, None));
+        std::fs::write(job.join("state.json"), r#"{"state":"blocked","needs":"which DB?"}"#).unwrap();
+        assert_eq!(job_wait(&dir, "abc12345"), (false, Some("which DB?".to_string())));
         std::fs::write(job.join("parent.json"), r#"{"sessionId":"p-1"}"#).unwrap();
         assert_eq!(job_parent(&dir, "abc12345").as_deref(), Some("p-1"));
         assert_eq!(job_parent(&dir, "nofile"), None);
@@ -267,7 +300,7 @@ mod tests {
 
     fn s(id: &str, parent: Option<&str>) -> Session {
         Session {
-            blocked: false, parent: parent.map(String::from), attach_id: String::new(), config_dir: String::new(),
+            blocked: false, needs: None, parent: parent.map(String::from), attach_id: String::new(), config_dir: String::new(),
             account: String::new(), account_index: 0, pid: 0, context: None, progress: None,
             session_id: id.into(), name: String::new(), cwd: String::new(), kind: String::new(), status: String::new(), since: 0,
         }
