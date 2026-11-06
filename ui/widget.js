@@ -26,7 +26,9 @@ const folder = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || p
 // counting it as working left finished sessions "working" for hours (owner 2026-10-20)
 // the session hub knows what the files don't: a session that waits for a permission or an answer (settings.remote.hubUrl)
 let hubWaiting = {}       // sessionId → what it asks ('' when the hub keeps no text, e.g. a work account)
-const state = (s) => s.sessionId in hubWaiting ? 'wait'
+// a bg session blocked by a permission prompt nobody sees (jobs/<id>/state.json): its own, red state
+const state = (s) => s.blocked ? 'blocked'
+  : s.sessionId in hubWaiting ? 'wait'
   : s.status === 'busy' ? 'busy'
   : s.status === 'idle' || s.status === 'shell' ? ((seen[s.sessionId] || 0) >= s.since ? 'idle' : 'wait')
   : 'wait'                // anything else (a permission prompt…) needs you
@@ -78,13 +80,15 @@ function render() {
   if (!S || editing) return
   const shown = sessions.filter(s => S.showBackground || s.kind !== 'bg')
   const busy = shown.filter(s => state(s) === 'busy').length + (S.remote.enabled ? remoteBusy() : 0)
-  const wait = shown.filter(s => state(s) === 'wait').length
+  const blocked = shown.filter(s => state(s) === 'blocked').length
+  const wait = shown.filter(s => state(s) === 'wait').length + blocked
   $('box').classList.toggle('waiting', wait > 0)
+  $('box').classList.toggle('blocked', blocked > 0)
   document.body.classList.toggle('open', !!S.expanded)
 
   const values = Array.isArray(counter) ? counter.map(v => v ?? '–').join(' / ') : ''
   $('head').innerHTML =
-    `<span class="dot ${wait ? 'wait' : busy ? 'busy' : 'idle'}" data-tauri-drag-region title="${T.sizeHint}"></span>` +
+    `<span class="dot ${blocked ? 'blocked' : wait ? 'wait' : busy ? 'busy' : 'idle'}" data-tauri-drag-region title="${T.sizeHint}"></span>` +
     `<span data-tauri-drag-region>${wait ? T.waiting(wait) : T.nobodyWaits}${busy ? ` <span class="muted">·</span> ${T.busy(busy)}` : ''}</span>` +
     `<span class="right">${values ? `<span class="counter-head" data-tauri-drag-region title="${esc(counterInfo())}">${esc(S.counter.label ? S.counter.label + ' ' : '')}${esc(values)}</span>` : ''}` +
     `<button class="gear" id="gear" title="${T.settings}">⚙</button></span>`
@@ -121,7 +125,8 @@ function render() {
     const p = s.progress && { ...s.progress, done: s.progress.tasks.filter(t => t.percent >= 100).length }
     const now = p && (p.tasks.find(t => t.active && t.percent < 100) || p.tasks.find(t => t.percent < 100))
     const asks = s.sessionId in hubWaiting
-    const doing = asks ? T.needsYou + (hubWaiting[s.sessionId] ? ': ' + hubWaiting[s.sessionId] : '')
+    const doing = st === 'blocked' ? T.needsPermission
+      : asks ? T.needsYou + (hubWaiting[s.sessionId] ? ': ' + hubWaiting[s.sessionId] : '')
       : `${st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free}${s.status === 'shell' ? ' · ' + T.background : ''} ${ago(s.since)}`
     // the row's tooltip: what the details line and the hidden parts would say (chips and dots show no words)
     const info = [s.name || folder(s.cwd), s.cwd, doing + (s.kind === 'bg' ? ' · ' + T.bg : ''),
@@ -130,8 +135,9 @@ function render() {
       ...(p ? [`${T.tasks} ${p.done}/${p.tasks.length} · ${p.overall}%`,
         ...p.tasks.map(t => `${t.percent >= 100 ? '✓' : t.active ? '▶' : '·'} ${t.percent}% ${t.title}`)] : [])].filter(Boolean).join('\n')
     return `<div class="row ${st}${many ? ' acc' : ''}" data-id="${esc(s.sessionId)}"${many ? ` data-acc="${s.accountIndex}"` : ''} title="${esc(info)}">
-      <span class="dot ${st}"></span>
+      ${s.kind === 'bg' ? `<span class="bgmark ${st}" data-acc="${s.accountIndex}">↳</span>` : `<span class="dot ${st}"></span>`}
       <span class="name">${esc(s.name || folder(s.cwd))}</span>
+      ${s.kind === 'bg' ? `<span class="chip ${st === 'blocked' ? 'blocked' : ''}">${T.bg}</span>` : ''}
       ${p ? `<span class="prog">${p.done}/${p.tasks.length} · ${p.overall}%</span>` : ''}
       ${many ? `<span class="letter" data-acc="${s.accountIndex}">${esc((s.account || '?').slice(0, 1).toUpperCase())}</span>` : ''}
       ${S.showContext ? `<span class="ctxbar">${ctx != null

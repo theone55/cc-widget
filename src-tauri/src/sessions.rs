@@ -40,6 +40,8 @@ pub struct Session {
     status: String,
     /// ms since the epoch: when the status last changed
     since: u64,
+    /// a bg session blocked by a permission prompt nobody sees (jobs/<id>/state.json)
+    blocked: bool,
     /// how full the context window is, % — from the statusline's file
     context: Option<f64>,
     /// the session's task list, if Claude keeps one (the session-progress mod)
@@ -70,6 +72,33 @@ fn progress(dir: &std::path::Path, session_id: &str) -> Option<Progress> {
     }
     let text = std::fs::read_to_string(dir.join("session-progress").join(format!("{session_id}.json"))).ok()?;
     serde_json::from_str::<Progress>(&text).ok().filter(|p| !p.tasks.is_empty())
+}
+
+/// `<config dir>/jobs/<job id>/state.json` of a background job: while a permission prompt nobody sees blocks it,
+/// it holds `"state":"working","tempo":"blocked"`. Internal file like the session's, read for bg sessions only.
+#[derive(Deserialize, Default)]
+struct JobState {
+    state: Option<String>,
+    tempo: Option<String>,
+}
+
+fn parse_job_state(text: &str) -> Option<JobState> {
+    serde_json::from_str(text).ok()
+}
+
+fn is_blocked(s: &JobState) -> bool {
+    s.state.as_deref() == Some("working") && s.tempo.as_deref() == Some("blocked")
+}
+
+/// true when the job waits on a permission prompt; a missing / unreadable file or odd id = false
+fn job_blocked(dir: &std::path::Path, job_id: &str) -> bool {
+    if job_id.is_empty() || job_id.contains(['/', '\\']) || job_id.contains("..") {
+        return false;
+    }
+    std::fs::read_to_string(dir.join("jobs").join(job_id).join("state.json"))
+        .ok()
+        .and_then(|t| parse_job_state(&t))
+        .is_some_and(|s| is_blocked(&s))
 }
 
 #[derive(Deserialize)]
@@ -103,8 +132,11 @@ pub fn read(accounts: &[Account]) -> Vec<Session> {
                 continue;
             }
             let session_id = f.session_id.unwrap_or_default();
-            let attach_id = f.job_id.filter(|j| !j.is_empty()).unwrap_or_else(|| session_id.clone());
+            let job_id = f.job_id.filter(|j| !j.is_empty());
+            let blocked = f.kind.as_deref() == Some("bg") && job_id.as_deref().is_some_and(|j| job_blocked(&dir, j));
+            let attach_id = job_id.unwrap_or_else(|| session_id.clone());
             out.push(Session {
+                blocked,
                 attach_id,
                 config_dir: dir.to_string_lossy().into_owned(),
                 account: account.label.clone(),
@@ -162,4 +194,29 @@ pub fn limits(accounts: &[Account]) -> Vec<Limits> {
             Some(Limits { account: account.label.clone(), account_index: index, file })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn job_state_blocked_or_not() {
+        assert!(is_blocked(&parse_job_state(r#"{"state":"working","tempo":"blocked"}"#).unwrap()));
+        assert!(!is_blocked(&parse_job_state(r#"{"state":"working","tempo":"active"}"#).unwrap()));
+        assert!(!is_blocked(&parse_job_state(r#"{"state":"done","tempo":"blocked"}"#).unwrap()));
+        assert!(parse_job_state("not json").is_none());
+    }
+
+    #[test]
+    fn job_state_from_disk_and_missing() {
+        let dir = std::env::temp_dir().join(format!("cc-widget-jobs-{}", std::process::id()));
+        let job = dir.join("jobs").join("abc12345");
+        std::fs::create_dir_all(&job).unwrap();
+        std::fs::write(job.join("state.json"), r#"{"state":"working","tempo":"blocked"}"#).unwrap();
+        assert!(job_blocked(&dir, "abc12345"));
+        assert!(!job_blocked(&dir, "nofile"));
+        assert!(!job_blocked(&dir, "../abc12345"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

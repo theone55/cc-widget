@@ -96,6 +96,17 @@ body.dense8 #limits { display: none; }
 .dot.busy { background: var(--ok); animation: pulse 1.6s steps(2, jump-none) infinite; }
 .dot.wait { background: var(--warn); }
 .dot.idle { background: var(--idle); }
+.dot.blocked { background: var(--full); }
+/* a background session: a ↳ glyph in the account color instead of the status dot, and a chip like .tag */
+.bgmark { flex: none; width: 8px; font-size: 11px; line-height: 8px; text-align: center; color: var(--idle); }
+.bgmark.busy { color: var(--ok); }
+.bgmark.wait { color: var(--warn); }
+.bgmark.blocked { color: var(--full) !important; }
+.chip { flex: none; font-size: 9px; line-height: 13px; padding: 0 4px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); }
+.chip.blocked { color: var(--full); border-color: var(--full); }
+#box.blocked { border-color: var(--full); }
+.row.blocked .name { color: var(--full); font-weight: 600; }
+.row.blocked { background: color-mix(in srgb, var(--full) 14%, transparent); }
 /* two steps, not a smooth fade: a transparent window is repainted whole on every animation frame, and a smooth
    pulse cost a fifth of a CPU core on Windows */
 @keyframes pulse { 50% { opacity: 0.4; } }

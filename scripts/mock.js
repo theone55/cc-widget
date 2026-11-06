@@ -22,6 +22,9 @@
     s('c', 'work', 0, 'billing-service', '/home/me/work/billing', 'busy', 1, 72),
     s('d', 'work', 0, 'docs', '/home/me/work/docs', 'busy', 0, 12),
   ]
+  // background sessions (claude --bg): one working, one blocked by a permission prompt
+  if (q.get('bg') === '1') sessions.push({...s('e', 'work', 0, 'nightly-refactor', '/home/me/work/api-gateway', 'busy', 3, 30), kind: 'bg', attachId: 'e1', configDir: ''},
+    {...s('f', 'personal', 1, 'migrate-db', '/home/me/side-project', 'busy', 9, 55), kind: 'bg', attachId: 'f1', configDir: '', blocked: true})
   // the session-progress mod's task list on the busy billing session
   sessions[2].progress = {overall: 55, tasks: [
     {title: 'Read the invoice flow', percent: 100, active: false},
