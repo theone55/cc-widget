@@ -229,9 +229,104 @@ pub fn focus(pid: u32, cwd: &str) -> Result<(), String> {
     Err("no window found (install xdotool or wmctrl)".into())
 }
 
+// ---- background sessions (`claude --bg`) have no window: a click opens a new terminal with `claude attach <id>` ----
+
+/// An id that is safe to put into a command line: the short job id or the session UUID (letters, digits, - _).
+fn valid_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// A config dir that can't break out of the quoting below (a Windows path never holds `"`; `%` would expand in cmd).
+fn valid_dir(dir: &str) -> bool {
+    !dir.contains(['"', '%', '\'', '\n', '\r', '\0'])
+}
+
+/// cmd.exe line: the account's config dir in the environment of this window only, then attach.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn windows_line(id: &str, dir: &str) -> String {
+    if dir.is_empty() {
+        format!("claude attach {id}")
+    } else {
+        format!("set \"CLAUDE_CONFIG_DIR={dir}\" && claude attach {id}")
+    }
+}
+
+/// POSIX shell line, the dir single-quoted.
+#[cfg_attr(windows, allow(dead_code))]
+fn sh_line(id: &str, dir: &str) -> String {
+    if dir.is_empty() {
+        format!("claude attach {id}")
+    } else {
+        format!("CLAUDE_CONFIG_DIR='{dir}' claude attach {id}")
+    }
+}
+
+/// Opens a new terminal window running `claude attach <id>` with the session's account in CLAUDE_CONFIG_DIR.
+pub fn attach(id: &str, config_dir: &str) -> Result<(), String> {
+    if !valid_id(id) {
+        return Err("bad session id".into());
+    }
+    if !valid_dir(config_dir) {
+        return Err("bad config dir".into());
+    }
+    spawn_terminal(id, config_dir)
+}
+
+#[cfg(windows)]
+fn spawn_terminal(id: &str, dir: &str) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+    const CREATE_NEW_CONSOLE: u32 = 0x10;
+    let line = windows_line(id, dir);
+    // Windows Terminal when installed (a new window); the env goes through `set` because an already running wt
+    // would not pass ours on. raw_arg: cmd doesn't understand the backslash-escaped quotes Rust would add.
+    let wt = Command::new("wt").raw_arg(format!("-w -1 cmd /k {line}")).spawn();
+    if wt.is_ok() {
+        return Ok(());
+    }
+    Command::new("cmd")
+        .raw_arg(format!("/c start \"cc-widget attach\" cmd /k {line}"))
+        .creation_flags(CREATE_NEW_CONSOLE)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn spawn_terminal(id: &str, dir: &str) -> Result<(), String> {
+    let line = sh_line(id, dir).replace('\\', "\\\\").replace('"', "\\\"");
+    let script = format!("tell application \"Terminal\"\n activate\n do script \"{line}\"\nend tell");
+    let ok = std::process::Command::new("osascript")
+        .args(["-e", &script])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if ok { Ok(()) } else { Err("osascript failed (Automation permission for Terminal?)".into()) }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn spawn_terminal(id: &str, dir: &str) -> Result<(), String> {
+    let mut cmd = std::process::Command::new("x-terminal-emulator");
+    cmd.arg("-e").arg("sh").arg("-c").arg(sh_line(id, dir));
+    cmd.spawn().map(|_| ()).map_err(|e| format!("x-terminal-emulator: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn attach_command_lines() {
+        assert!(valid_id("0c001924") && valid_id("0c001924-3b89-4834-83f8-19023c173db1"));
+        assert!(!valid_id("") && !valid_id("a b") && !valid_id("x&calc") && !valid_id("a\"b"));
+        assert!(valid_dir(r"C:\Users\me\.claude-work") && !valid_dir("C:\\a\"b") && !valid_dir("%PATH%"));
+        assert_eq!(
+            windows_line("0c001924", r"C:\Users\me\.claude-work"),
+            r#"set "CLAUDE_CONFIG_DIR=C:\Users\me\.claude-work" && claude attach 0c001924"#
+        );
+        assert_eq!(sh_line("0c001924", "/home/me/.claude"), "CLAUDE_CONFIG_DIR='/home/me/.claude' claude attach 0c001924");
+        assert_eq!(sh_line("x", ""), "claude attach x");
+    }
 
     #[test]
     fn the_window_naming_the_deepest_folder_wins() {

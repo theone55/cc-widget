@@ -115,6 +115,12 @@ async fn focus_session(pid: u32, cwd: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || focus::focus(pid, &cwd)).await.map_err(|e| e.to_string())?
 }
 
+/// A background session has no window: opens a terminal running `claude attach <id>` for the account's config dir.
+#[tauri::command]
+async fn attach_session(id: String, config_dir: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || focus::attach(&id, &config_dir)).await.map_err(|e| e.to_string())?
+}
+
 /// The "System" section's numbers (only while it is on: the page asks every 2 s).
 #[tauri::command]
 async fn system_stats(state: tauri::State<'_, AppState>) -> Result<system::Stats, String> {
@@ -221,6 +227,7 @@ fn main() {
             counter_set_token,
             counter_has_token,
             focus_session,
+            attach_session,
             system_stats,
             remote_host,
             remote_runs,

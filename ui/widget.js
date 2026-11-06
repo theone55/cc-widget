@@ -126,6 +126,7 @@ function render() {
     // the row's tooltip: what the details line and the hidden parts would say (chips and dots show no words)
     const info = [s.name || folder(s.cwd), s.cwd, doing + (s.kind === 'bg' ? ' · ' + T.bg : ''),
       ctx != null ? `${T.context} ${ctx}%${hint}` : '', many ? s.account : '',
+      s.kind === 'bg' ? T.attachHint : '',
       ...(p ? [`${T.tasks} ${p.done}/${p.tasks.length} · ${p.overall}%`,
         ...p.tasks.map(t => `${t.percent >= 100 ? '✓' : t.active ? '▶' : '·'} ${t.percent}% ${t.title}`)] : [])].filter(Boolean).join('\n')
     return `<div class="row ${st}${many ? ' acc' : ''}" data-id="${esc(s.sessionId)}"${many ? ` data-acc="${s.accountIndex}"` : ''} title="${esc(info)}">
@@ -407,6 +408,8 @@ $('list').addEventListener('mousedown', e => {
   seen[s.sessionId] = s.since
   save('seen', seen)
   render()
+  // a background session has no window: open a terminal with `claude attach`
+  if (s.kind === 'bg') return invoke('attach_session', {id: s.attachId, configDir: s.configDir}).catch(() => {})
   // bring up the terminal / IDE window the session runs in
   invoke('focus_session', {pid: s.pid, cwd: s.cwd}).catch(() => {})
 })

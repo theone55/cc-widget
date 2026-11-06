@@ -14,6 +14,8 @@ struct SessionFile {
     cwd: Option<String>,
     name: Option<String>,
     kind: Option<String>,
+    /// the short id of a background job (`<config dir>/jobs/<id>/`), what `claude attach` takes
+    job_id: Option<String>,
     status: Option<String>,
     status_updated_at: Option<u64>,
 }
@@ -31,6 +33,10 @@ pub struct Session {
     cwd: String,
     /// "interactive" (a terminal) or "bg" (a background job)
     kind: String,
+    /// what `claude attach` takes for a bg session: the job id, else the session id
+    attach_id: String,
+    /// the account's resolved config dir (CLAUDE_CONFIG_DIR of the attach window)
+    config_dir: String,
     status: String,
     /// ms since the epoch: when the status last changed
     since: u64,
@@ -97,7 +103,10 @@ pub fn read(accounts: &[Account]) -> Vec<Session> {
                 continue;
             }
             let session_id = f.session_id.unwrap_or_default();
+            let attach_id = f.job_id.filter(|j| !j.is_empty()).unwrap_or_else(|| session_id.clone());
             out.push(Session {
+                attach_id,
+                config_dir: dir.to_string_lossy().into_owned(),
                 account: account.label.clone(),
                 account_index: index,
                 pid: f.pid,
