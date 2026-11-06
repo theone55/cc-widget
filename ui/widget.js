@@ -129,12 +129,15 @@ function render() {
       : asks ? T.needsYou + (hubWaiting[s.sessionId] ? ': ' + hubWaiting[s.sessionId] : '')
       : `${st === 'busy' ? T.working : st === 'wait' ? T.waitsForYou : T.free}${s.status === 'shell' ? ' · ' + T.background : ''} ${ago(s.since)}`
     // the row's tooltip: what the details line and the hidden parts would say (chips and dots show no words)
-    const info = [s.name || folder(s.cwd), s.cwd, doing + (s.kind === 'bg' ? ' · ' + T.bg : ''),
+    let info = [s.name || folder(s.cwd), s.cwd, doing + (s.kind === 'bg' ? ' · ' + T.bg : ''),
       ctx != null ? `${T.context} ${ctx}%${hint}` : '', many ? s.account : '',
       s.kind === 'bg' ? T.attachHint : '',
       ...(p ? [`${T.tasks} ${p.done}/${p.tasks.length} · ${p.overall}%`,
         ...p.tasks.map(t => `${t.percent >= 100 ? '✓' : t.active ? '▶' : '·'} ${t.percent}% ${t.title}`)] : [])].filter(Boolean).join('\n')
-    return `<div class="row ${st}${many ? ' acc' : ''}" data-id="${esc(s.sessionId)}"${many ? ` data-acc="${s.accountIndex}"` : ''} title="${esc(info)}">
+    // a bg session started by another one is listed under it (sessions.rs), indented
+    const parent = s.parent && shown.find(x => x.sessionId === s.parent)
+    if (parent) info += '\n' + T.startedBy + ' ' + (parent.name || folder(parent.cwd))
+    return `<div class="row ${st}${many ? ' acc' : ''}${parent ? ' child' : ''}" data-id="${esc(s.sessionId)}"${many ? ` data-acc="${s.accountIndex}"` : ''} title="${esc(info)}">
       ${s.kind === 'bg' ? `<span class="bgmark ${st}" data-acc="${s.accountIndex}">↳</span>` : `<span class="dot ${st}"></span>`}
       <span class="name">${esc(s.name || folder(s.cwd))}</span>
       ${s.kind === 'bg' ? `<span class="chip ${st === 'blocked' ? 'blocked' : ''}">${T.bg}</span>` : ''}

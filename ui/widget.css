@@ -214,3 +214,5 @@ body.open .sub.details { display: block; }
 #settings .st-connected { color: var(--ok); }
 #settings .st-other { color: var(--muted); }
 ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+/* a background session started by the row above it (its parent) */
+.row.child { margin-left: 12px; }

@@ -42,6 +42,8 @@ pub struct Session {
     since: u64,
     /// a bg session blocked by a permission prompt nobody sees (jobs/<id>/state.json)
     blocked: bool,
+    /// the session that started this bg one, when its launcher left jobs/<id>/parent.json ({"sessionId": "..."})
+    parent: Option<String>,
     /// how full the context window is, % — from the statusline's file
     context: Option<f64>,
     /// the session's task list, if Claude keeps one (the session-progress mod)
@@ -101,6 +103,22 @@ fn job_blocked(dir: &std::path::Path, job_id: &str) -> bool {
         .is_some_and(|s| is_blocked(&s))
 }
 
+/// `<config dir>/jobs/<job id>/parent.json` — Claude Code doesn't record who started a bg job; a launcher that knows
+/// (e.g. a script running `claude --bg` from a session) may leave `{"sessionId": "<the starting session>"}` there.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ParentFile {
+    session_id: Option<String>,
+}
+
+fn job_parent(dir: &std::path::Path, job_id: &str) -> Option<String> {
+    if job_id.is_empty() || job_id.contains(['/', '\\']) || job_id.contains("..") {
+        return None;
+    }
+    let text = std::fs::read_to_string(dir.join("jobs").join(job_id).join("parent.json")).ok()?;
+    serde_json::from_str::<ParentFile>(&text).ok()?.session_id.filter(|s| !s.is_empty() && s.len() <= 80)
+}
+
 #[derive(Deserialize)]
 struct CtxFile {
     used_pct: Option<f64>,
@@ -134,9 +152,11 @@ pub fn read(accounts: &[Account]) -> Vec<Session> {
             let session_id = f.session_id.unwrap_or_default();
             let job_id = f.job_id.filter(|j| !j.is_empty());
             let blocked = f.kind.as_deref() == Some("bg") && job_id.as_deref().is_some_and(|j| job_blocked(&dir, j));
+            let parent = if f.kind.as_deref() == Some("bg") { job_id.as_deref().and_then(|j| job_parent(&dir, j)) } else { None };
             let attach_id = job_id.unwrap_or_else(|| session_id.clone());
             out.push(Session {
                 blocked,
+                parent,
                 attach_id,
                 config_dir: dir.to_string_lossy().into_owned(),
                 account: account.label.clone(),
@@ -154,6 +174,27 @@ pub fn read(accounts: &[Account]) -> Vec<Session> {
         }
     }
     out.sort_by(|a, b| b.since.cmp(&a.since));
+    under_parents(out)
+}
+
+/// A background session whose parent is in the list goes right under it (several: newest first, as sorted);
+/// one whose parent is gone keeps its place.
+fn under_parents(sorted: Vec<Session>) -> Vec<Session> {
+    let ids: std::collections::HashSet<String> = sorted.iter().map(|s| s.session_id.clone()).collect();
+    let (children, top): (Vec<Session>, Vec<Session>) =
+        sorted.into_iter().partition(|s| s.parent.as_ref().is_some_and(|p| ids.contains(p) && *p != s.session_id));
+    let mut children: Vec<Option<Session>> = children.into_iter().map(Some).collect();
+    let mut out = Vec::with_capacity(top.len() + children.len());
+    for s in top {
+        let id = s.session_id.clone();
+        out.push(s);
+        for c in children.iter_mut() {
+            if c.as_ref().is_some_and(|c| c.parent.as_deref() == Some(id.as_str())) {
+                out.push(c.take().unwrap());
+            }
+        }
+    }
+    out.extend(children.into_iter().flatten()); // a child of a child: kept, at the end
     out
 }
 
@@ -217,6 +258,27 @@ mod tests {
         assert!(job_blocked(&dir, "abc12345"));
         assert!(!job_blocked(&dir, "nofile"));
         assert!(!job_blocked(&dir, "../abc12345"));
+        std::fs::write(job.join("parent.json"), r#"{"sessionId":"p-1"}"#).unwrap();
+        assert_eq!(job_parent(&dir, "abc12345").as_deref(), Some("p-1"));
+        assert_eq!(job_parent(&dir, "nofile"), None);
+        assert_eq!(job_parent(&dir, "../abc12345"), None);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn s(id: &str, parent: Option<&str>) -> Session {
+        Session {
+            blocked: false, parent: parent.map(String::from), attach_id: String::new(), config_dir: String::new(),
+            account: String::new(), account_index: 0, pid: 0, context: None, progress: None,
+            session_id: id.into(), name: String::new(), cwd: String::new(), kind: String::new(), status: String::new(), since: 0,
+        }
+    }
+
+    #[test]
+    fn a_child_goes_under_its_parent() {
+        let order = |v: Vec<Session>| under_parents(v).into_iter().map(|s| s.session_id).collect::<Vec<_>>();
+        // sorted newest first: the children are newer than their parent
+        assert_eq!(order(vec![s("c1", Some("p")), s("x", None), s("c2", Some("p")), s("p", None)]), ["x", "p", "c1", "c2"]);
+        // a parent that is gone: the child keeps its place
+        assert_eq!(order(vec![s("c", Some("gone")), s("x", None)]), ["c", "x"]);
     }
 }
