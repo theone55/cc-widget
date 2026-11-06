@@ -280,7 +280,36 @@ pub fn attach(id: &str, config_dir: &str) -> Result<(), String> {
     if !valid_dir(config_dir) {
         return Err("bad config dir".into());
     }
+    // a window attached to this session is already open (an earlier click): bring it up, don't open another
+    if let Some(pid) = attached(id) {
+        // `focus` picks among the terminal's windows the one whose title names this "folder": the window title
+        if focus(pid, &window_title(id)).is_ok() {
+            return Ok(());
+        }
+    }
     spawn_terminal(id, &env_dir(config_dir))
+}
+
+/// The attach window's title: one word (no quoting needed), unique per session.
+fn window_title(id: &str) -> String {
+    format!("claude-attach-{id}")
+}
+
+/// The `claude attach <id>` process an earlier click started, if it still runs.
+fn attached(id: &str) -> Option<u32> {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, UpdateKind};
+    let mut sys = sysinfo::System::new();
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always));
+    sys.processes().iter().find_map(|(pid, p)| {
+        let args: Vec<String> = p.cmd().iter().map(|a| a.to_string_lossy().into_owned()).collect();
+        is_attach_of(&args, id).then(|| pid.as_u32())
+    })
+}
+
+/// `claude attach <id>`: an "attach" argument followed by exactly this id (not a session that merely mentions it).
+fn is_attach_of(args: &[String], id: &str) -> bool {
+    args.windows(2).any(|w| w[0] == "attach" && w[1] == id)
+        && args.first().is_some_and(|a| a.to_lowercase().contains("claude"))
 }
 
 #[cfg(windows)]
@@ -291,13 +320,17 @@ fn spawn_terminal(id: &str, dir: &str) -> Result<(), String> {
     let line = windows_line(id, dir);
     // Windows Terminal when installed (a new window); the env goes through `set` because an already running wt
     // would not pass ours on. raw_arg: cmd doesn't understand the backslash-escaped quotes Rust would add.
-    let wt = Command::new("wt").raw_arg(format!("-w -1 cmd /k {line}")).spawn();
+    // the window is titled after the session, so the next click finds this very window (one Windows Terminal process
+    // owns every wt window: its first window would be the wrong one)
+    let wt = Command::new("wt")
+        .raw_arg(format!("-w -1 new-tab --title {} --suppressApplicationTitle cmd /k {line}", window_title(id)))
+        .spawn();
     if wt.is_ok() {
         return Ok(());
     }
     // no Windows Terminal: cmd in a console of its own (not `cmd /c start …`: the outer cmd would split at `&&`)
     Command::new("cmd")
-        .raw_arg(format!("/k {line}"))
+        .raw_arg(format!("/k title {}&& {line}", window_title(id)))
         .creation_flags(CREATE_NEW_CONSOLE)
         .spawn()
         .map(|_| ())
@@ -341,6 +374,10 @@ mod tests {
         assert_eq!(sh_line("0c001924", "/home/me/.claude-work"), "CLAUDE_CONFIG_DIR='/home/me/.claude-work' claude attach 0c001924");
         assert_eq!(sh_line("x", ""), "unset CLAUDE_CONFIG_DIR; claude attach x");
         assert!(!valid_dir(r"C:\a&calc") && !valid_dir("C:\\a;b") && !valid_dir("a^b"));
+        let v = |s: &str| s.split(' ').map(String::from).collect::<Vec<_>>();
+        assert!(is_attach_of(&v(r"C:\bin\claude.exe attach 629d6894"), "629d6894"));
+        assert!(!is_attach_of(&v("claude attach 629d6894"), "629d"));
+        assert!(!is_attach_of(&v(r"cmd /k set X=&& claude attach 629d6894"), "629d6894")); // the cmd around it
         let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap();
         assert_eq!(env_dir(&format!("{home}/.claude")), "");
         assert_eq!(env_dir(&format!("{home}\\.claude\\")), "");
