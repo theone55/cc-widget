@@ -12,6 +12,7 @@ let S = null              // the settings (Rust's settings.rs)
 let seen = load('seen', {})
 let sessions = []
 let limits = []
+let gpt = []              // the GPT (Codex) accounts' limits (codex.rs GptLimits)
 let counter = null        // [values] | 'no-token' | 'error…' | null
 let sys = null            // the System section's last numbers (system.rs Stats) or null
 const cpuHist = [], memHist = []   // the last 2 minutes, one sample per 2 s
@@ -106,17 +107,19 @@ function render() {
     const p = fresh(b) ? Math.round(b.used_percentage) : 0
     return `${label}: ${p}%` + (fresh(b) && b.resets_at ? ` · ${T.resets} ${T.in} ${left(b.resets_at)}` : '')
   }
-  $('limits').innerHTML = !S.showLimits ? '' : limits.length ? limits.map(l => {
+  const claudeRows = limits.map(l => {
     const info = [l.account, limInfo(T.h5, l.five_hour), limInfo(T.d7, l.seven_day)].join('\n')
     const resets = [fresh(l.five_hour) && l.five_hour.resets_at && `${T.h5} ${T.in} ${left(l.five_hour.resets_at)}`,
                     fresh(l.seven_day) && l.seven_day.resets_at && `${T.d7} ${T.in} ${left(l.seven_day.resets_at)}`].filter(Boolean).join(' · ')
     return `<div class="lim" title="${esc(info)}"><span class="tag" data-acc="${l.accountIndex}">${esc(l.account)}</span>
       ${lim(T.h5, l.five_hour)}${lim(T.d7, l.seven_day)}</div>
       ${resets ? `<div class="resets details">${T.resets}: ${resets}</div>` : ''}`
-  }).join('') : `<div class="empty">${T.limitsLater}</div>`
+  })
+  const rows = [...claudeRows, ...gpt.map(gptRow)]
+  $('limits').innerHTML = !S.showLimits ? '' : rows.length ? rows.join('') : `<div class="empty">${T.limitsLater}</div>`
 
   // sessions: one line each — status dot, name, account letter, context bar
-  const many = S.accounts.length > 1
+  const many = S.accounts.filter(a => a.engine !== 'codex').length > 1
   $('list').innerHTML = shown.length ? shown.map(s => {
     const st = state(s)
     const ctx = s.context != null ? Math.round(s.context) : null
@@ -160,6 +163,30 @@ function render() {
   for (const i of document.querySelectorAll('.bar i')) i.style.width = i.dataset.p + '%'
   paintAccounts($('view'))
   fit()
+}
+
+// ---- GPT (Codex CLI) accounts: the windows come as the account reports them, named by their length ----
+const winLabel = (mins) => !mins ? '?' : mins < 1440 ? `${Math.round(mins / 60)}${T.hr}` : `${Math.round(mins / 1440)}${T.day}`
+// like the Claude windows: one whose reset time has passed is 0%, not stale
+const gptFresh = (w) => w && w.used != null && !(w.resetsAt && w.resetsAt * 1000 < Date.now())
+const gptPct = (w) => gptFresh(w) ? Math.round(w.used) : 0
+const gptError = (e) => e === 'login' ? T.gptLogin : e === 'no-codex' ? T.gptNoCodex : e === 'timeout' ? T.gptTimeout : e
+function gptRow(g) {
+  const th = S.thresholds
+  const wins = g.windows || []
+  const label = '⬡ ' + esc(g.account)
+  const plan = g.plan ? `<span class="chip plan">${esc(g.plan)}</span>` : ''
+  const hit = g.reached ? `<span class="chip blocked">${T.gptReached}</span>` : ''
+  const info = [g.account + ' · GPT', g.email, g.plan && `${T.plan}: ${g.plan}`,
+    ...wins.map(w => `${winLabel(w.mins)}: ${gptPct(w)}%` + (gptFresh(w) && w.resetsAt ? ` · ${T.resets} ${T.in} ${left(w.resetsAt)}` : '')),
+    g.error && gptError(g.error), g.reached && T.gptReached,
+    g.updatedMs && `${T.dataAge}: ${ago(g.updatedMs)}`, g.callsDay != null && `${T.callsDay}: ${g.callsDay}`].filter(Boolean).join('\n')
+  const body = g.error ? `<span class="muted gerr">${esc(gptError(g.error))}</span>`
+    : wins.length ? wins.map(w => `<span class="lbl">${winLabel(w.mins)}</span>${bar(gptPct(w), th.limitWarn, th.limitFull)}<span class="pct">${gptPct(w)}%</span>`).join('')
+    : '<span class="muted">…</span>'
+  const resets = wins.filter(w => gptFresh(w) && w.resetsAt).map(w => `${winLabel(w.mins)} ${T.in} ${left(w.resetsAt)}`).join(' · ')
+  return `<div class="lim gpt" title="${esc(info)}"><span class="tag gpt" data-acc="${g.accountIndex}">${label}</span>${body}${hit}${plan}</div>
+    ${resets ? `<div class="resets details">${T.resets}: ${resets}</div>` : ''}`
 }
 
 // a subagent of a session (Agent tool): a violet ◆ + «суб» chip, its own task list as a thin violet bar
@@ -476,7 +503,7 @@ async function openSettings() {
     <h4>${T.accounts}</h4>
     <div class="hint">${T.accountsHint}</div>
     <div id="accs"></div>
-    <div style="display:flex;gap:6px"><button type="button" id="acc-add">${T.add}</button><button type="button" id="acc-find">${T.find}</button></div>
+    <div style="display:flex;gap:6px"><button type="button" id="acc-add">${T.add}</button><button type="button" id="acc-add-gpt">${T.addGpt}</button><button type="button" id="acc-find">${T.find}</button></div>
     <h4>${T.counter}</h4>
     <div class="hint">${T.counterHint}</div>
     ${check('counterEnabled', S.counter.enabled, T.enabled)}
@@ -506,11 +533,11 @@ async function openSettings() {
 
 async function drawAccounts(list) {
   const box = $('accs')
-  box.innerHTML = list.map((a, i) => `<div class="acc" data-i="${i}">
+  box.innerHTML = list.map((a, i) => `<div class="acc" data-i="${i}" data-engine="${a.engine === 'codex' ? 'codex' : 'claude'}">
       <input type="color" name="color" value="${a.color || PALETTE[i % PALETTE.length]}" title="color">
       <input type="text" name="label" value="${esc(a.label)}"><input type="text" name="dir" value="${esc(a.dir)}">
-      <span class="st" data-dir="${esc(a.dir)}"></span><button type="button" class="acc-del" title="×">×</button></div>`).join('')
-  for (const span of box.querySelectorAll('.st')) {
+      <span class="st" data-dir="${esc(a.dir)}">${a.engine === 'codex' ? `<span class="chip" title="${esc(T.gptMarkHint)}">⬡ GPT</span>` : ''}</span><button type="button" class="acc-del" title="×">×</button></div>`).join('')
+  for (const span of box.querySelectorAll('.acc[data-engine=claude] .st')) {
     const st = await invoke('statusline_status', {dir: span.dataset.dir}).catch(() => 'off')
     span.innerHTML = st === 'connected'
       ? `<button type="button" class="acc-off">${T.disconnect}</button>`
@@ -521,8 +548,10 @@ async function drawAccounts(list) {
 }
 const readAccounts = () => [...document.querySelectorAll('#accs .acc')].map(r => ({
   label: r.querySelector('[name=label]').value.trim(), dir: r.querySelector('[name=dir]').value.trim(),
-  color: r.querySelector('[name=color]').value,
+  color: r.querySelector('[name=color]').value, engine: r.dataset.engine,
 })).filter(a => a.dir)
+// ~/.codex → gpt, ~/.codex-2 → gpt-2 (paths.rs codex_label)
+const codexLabel = (dir) => { const m = /\.codex-([^/\\]+)[/\\]?$/.exec(dir); return m ? 'gpt-' + m[1].toLowerCase() : 'gpt' }
 
 // the look changes live while you move the slider or pick a color; Cancel goes back to the saved one
 $('settings').addEventListener('input', e => {
@@ -538,11 +567,14 @@ $('settings').addEventListener('input', e => {
 $('settings').addEventListener('click', async e => {
   const t = e.target
   if (t.id === 'cancel') return closeSettings()
-  if (t.id === 'acc-add') return drawAccounts([...readAccounts(), {label: 'claude', dir: '.claude'}])
+  if (t.id === 'acc-add') return drawAccounts([...readAccounts(), {label: 'claude', dir: '.claude', engine: 'claude'}])
+  if (t.id === 'acc-add-gpt') return drawAccounts([...readAccounts(), {label: 'gpt', dir: '.codex', engine: 'codex'}])
   if (t.id === 'acc-find') {
     const found = await invoke('detect_accounts')
+    const gptFound = await invoke('detect_codex').catch(() => [])
     const have = readAccounts()
-    for (const dir of found) if (!have.some(a => a.dir === dir)) have.push({label: dir.replace(/^\.claude-?/, '') || 'claude', dir})
+    for (const dir of found) if (!have.some(a => a.dir === dir)) have.push({label: dir.replace(/^\.claude-?/, '') || 'claude', dir, engine: 'claude'})
+    for (const dir of gptFound) if (!have.some(a => a.dir === dir)) have.push({label: codexLabel(dir), dir, engine: 'codex'})
     return drawAccounts(have)
   }
   if (t.classList.contains('acc-del')) {
@@ -573,7 +605,7 @@ $('settings').addEventListener('submit', async e => {
     showLimits: v('showLimits').checked,
     showContext: v('showContext').checked,
     showBackground: v('showBackground').checked,
-    accounts: readAccounts().map(a => ({label: a.label || a.dir, dir: a.dir, color: a.color})),
+    accounts: readAccounts().map(a => ({label: a.label || a.dir, dir: a.dir, color: a.color, engine: a.engine})),
     counter: {
       ...S.counter,
       enabled: v('counterEnabled').checked,
@@ -612,12 +644,13 @@ function closeSettings() {
 async function pollSessions() {
   sessions = await invoke('sessions').catch(() => [])
   limits = await invoke('limits').catch(() => [])
+  gpt = await invoke('gpt_limits').catch(() => [])
   // forget "seen" marks of sessions that are gone
   const ids = new Set(sessions.map(s => s.sessionId))
   for (const k of Object.keys(seen)) if (!ids.has(k)) delete seen[k]
   save('seen', seen)
   // redraw only when something changed (the ages in the details tick by the minute)
-  const key = JSON.stringify([sessions, limits, Math.floor(Date.now() / 60000)])
+  const key = JSON.stringify([sessions, limits, gpt, Math.floor(Date.now() / 60000)])
   if (key === lastPoll) return
   lastPoll = key
   render()

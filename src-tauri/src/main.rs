@@ -5,6 +5,7 @@
 // everything the page can ask for.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod codex;
 mod counter;
 mod focus;
 mod paths;
@@ -78,6 +79,18 @@ async fn sessions(state: tauri::State<'_, AppState>) -> Result<Vec<sessions::Ses
 #[tauri::command]
 fn limits(state: tauri::State<AppState>) -> Vec<sessions::Limits> {
     sessions::limits(&current(&state).accounts)
+}
+
+/// GPT (Codex CLI) account folders found on this machine (for "Find" in the settings).
+#[tauri::command]
+fn detect_codex() -> Vec<String> {
+    paths::detect_codex()
+}
+
+/// The GPT accounts' limits: from the cache at once, a probe of `codex app-server` runs in the background.
+#[tauri::command]
+fn gpt_limits(state: tauri::State<AppState>) -> Vec<codex::GptLimits> {
+    codex::limits(&current(&state).accounts)
 }
 
 #[tauri::command]
@@ -220,6 +233,8 @@ fn main() {
             detect_accounts,
             sessions,
             limits,
+            detect_codex,
+            gpt_limits,
             statusline_status,
             statusline_connect,
             statusline_disconnect,

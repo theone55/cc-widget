@@ -13,11 +13,13 @@ pub struct Account {
     pub dir: String,
     /// its color on the widget ("#60a5fa"); empty = one from the built-in palette by position
     pub color: String,
+    /// "claude" (a CLAUDE_CONFIG_DIR folder, the default) or "codex" (a GPT account: a CODEX_HOME folder)
+    pub engine: String,
 }
 
 impl Default for Account {
     fn default() -> Self {
-        Account { label: "claude".into(), dir: ".claude".into(), color: String::new() }
+        Account { label: "claude".into(), dir: ".claude".into(), color: String::new(), engine: "claude".into() }
     }
 }
 
@@ -161,8 +163,14 @@ impl Default for Settings {
                 .into_iter()
                 .map(|dir| {
                     let label = dir.trim_start_matches(".claude").trim_start_matches('-');
-                    Account { label: if label.is_empty() { "claude".into() } else { label.into() }, dir, color: String::new() }
+                    Account { label: if label.is_empty() { "claude".into() } else { label.into() }, dir, ..Account::default() }
                 })
+                .chain(crate::paths::detect_codex().into_iter().map(|dir| Account {
+                    label: crate::paths::codex_label(&dir),
+                    dir,
+                    engine: "codex".into(),
+                    ..Account::default()
+                }))
                 .collect(),
             show_limits: true,
             show_context: true,
@@ -196,4 +204,18 @@ pub fn save(config_dir: &std::path::Path, settings: &Settings) -> Result<(), Str
     let tmp = config_dir.join("settings.json.tmp");
     std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, file(config_dir)).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_old_settings_file_without_engine_loads_as_claude() {
+        let s: Settings = serde_json::from_str(r##"{"accounts":[{"label":"work","dir":".claude-work","color":"#fff"}]}"##).unwrap();
+        assert_eq!(s.accounts.len(), 1);
+        assert_eq!(s.accounts[0].engine, "claude");
+        let g: Settings = serde_json::from_str(r#"{"accounts":[{"label":"gpt","dir":".codex","engine":"codex"}]}"#).unwrap();
+        assert_eq!(g.accounts[0].engine, "codex");
+    }
 }

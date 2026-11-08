@@ -53,7 +53,17 @@
     {account: 'work', accountIndex: 0, five_hour: {used_percentage: 35, resets_at: sec + 117 * 60}, seven_day: {used_percentage: 86, resets_at: sec + 25 * 3600}},
     {account: 'personal', accountIndex: 1, five_hour: {used_percentage: 5, resets_at: sec + 97 * 60}, seven_day: {used_percentage: 20, resets_at: sec + 106 * 3600}},
   ]
+  // GPT (Codex) accounts (?gpt=1): a paid one with 5 h + 7 d windows, a free one with a single 30-day window
+  const gpt = []
+  if (q.get('gpt') === '1') {
+    settings.accounts.push({label: 'gpt', dir: '.codex', color: '', engine: 'codex'}, {label: 'gpt-2', dir: '.codex-2', color: '', engine: 'codex'})
+    gpt.push({account: 'gpt', accountIndex: 2, email: 'me@example.com', plan: 'plus', reached: false, error: null, updatedMs: now - 3 * 60000, callsDay: 42,
+        windows: [{mins: 300, used: 31, resetsAt: sec + 140 * 60}, {mins: 10080, used: 64, resetsAt: sec + 71 * 3600}]},
+      {account: 'gpt-2', accountIndex: 3, email: 'free@example.com', plan: 'free', reached: false, error: null, updatedMs: now - 4 * 60000, callsDay: null,
+        windows: [{mins: 43200, used: 12, resetsAt: sec + 19 * 86400}]})
+  }
   const answers = {
+    gpt_limits: () => gpt, detect_codex: () => ['.codex', '.codex-2'],
     settings_get: () => settings, settings_set: () => null, sessions: () => sessions, limits: () => limits,
     statusline_status: ({dir}) => dir === '.claude' ? 'connected' : 'off', detect_accounts: () => ['.claude', '.claude-personal'],
     counter_has_token: () => false, 'plugin:autostart|is_enabled': () => true,

@@ -132,6 +132,14 @@ body.dense8 #limits { display: none; }
 .tag { font-size: 10px; line-height: 14px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted);
   flex: none; width: 52px; text-align: center; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .resets { color: var(--muted); font-size: 10px; margin: 0 0 3px 58px; }
+/* a GPT (Codex) account: a dashed tag with a ⬡ mark tells it from a Claude one; its windows are labelled by length
+   ("5h", "7d", "30d"), so the label may be wider; the plan chip closes the line */
+.tag.gpt { border-style: dashed; }
+.lim.gpt .lbl { width: auto; min-width: 16px; }
+.lim .gerr { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip.plan { text-transform: uppercase; letter-spacing: 0.04em; }
+body.dense6 .lim .chip.plan { display: none; }
+@media (max-width: 260px) { .lim .chip.plan { display: none; } }
 
 /* the System section: three cards (CPU, RAM, GPU) — a fill from the bottom = the load now, a line = the last 2 minutes;
    under them a column per core made of its threads, each with a glowing cap */

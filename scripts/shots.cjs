@@ -18,6 +18,8 @@ const shots = [
   ['widget-details.png', 'open=1', 348, 330],
   ['widget-light.png', 'theme=light', 348, 230],
   ['widget-settings.png', 'settings=1', 388, 700],
+  ['widget-gpt.png', 'gpt=1&open=1', 348, 360],
+  ['widget-gpt-ru-settings.png', 'gpt=1&settings=1&lang=ru', 388, 700],
   ['widget-ru.png', 'lang=ru&open=1', 348, 330],
   ['widget-remote.png', 'remote=1&open=1', 348, 470],
   ['widget-dense1.png', 'level=1', 348, 260],

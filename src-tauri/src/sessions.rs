@@ -303,6 +303,10 @@ pub fn read(accounts: &[Account]) -> Vec<Session> {
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
     let mut out = vec![];
     for (index, account) in accounts.iter().enumerate() {
+        // a GPT account has no sessions here (yet)
+        if account.engine == "codex" {
+            continue;
+        }
         let Some(dir) = paths::resolve(&account.dir) else { continue };
         let Ok(entries) = std::fs::read_dir(dir.join("sessions")) else { continue };
         for entry in entries.flatten() {
@@ -403,6 +407,7 @@ pub fn limits(accounts: &[Account]) -> Vec<Limits> {
     accounts
         .iter()
         .enumerate()
+        .filter(|(_, account)| account.engine != "codex")
         .filter_map(|(index, account)| {
             let dir = paths::resolve(&account.dir)?;
             let text = std::fs::read_to_string(paths::limits_file(&dir)).ok()?;

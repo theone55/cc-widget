@@ -79,6 +79,10 @@ Everything is in ⚙:
 - **What to show:** limits, context, background jobs.
 - **Start with the system.**
 - **Accounts:** a label and a config folder each (several accounts via `CLAUDE_CONFIG_DIR`).
+- **GPT accounts (OpenAI Codex CLI):** a folder with an `auth.json` (`~/.codex`, `~/.codex-*`, `$CODEX_HOME`) shows as a
+  dashed `⬡ gpt` tag in the limits block, with its plan (free / plus / pro) and a bar per window the account reports
+  (5h / 7d / 30d). Limits come from `codex app-server` (needs the `codex` CLI; probed at most every 5 minutes); no
+  sessions for them yet. **Find** in the settings picks them up, **+ GPT** adds one by hand.
 - **Counter (optional):** a few numbers from your own server in the header, for example a site's visitors.
   cc-widget sends `GET <url>`, gets JSON back and reads the fields you list as dot paths, optionally named (`today=visitors.today`). An optional
   token is kept in the system keychain; it is fetched every N minutes (5 by default). With a *pass URL*, the token is
