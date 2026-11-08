@@ -174,7 +174,8 @@ const gptError = (e) => e === 'login' ? T.gptLogin : e === 'no-codex' ? T.gptNoC
 function gptRow(g) {
   const th = S.thresholds
   const wins = g.windows || []
-  const label = '⬡ ' + esc(g.account)
+  // the dashed border marks a GPT account; a glyph in front made "gpt-2" overflow the 52 px tag (owner 2026-11-08)
+  const label = esc(g.account)
   const plan = g.plan ? `<span class="chip plan">${esc(g.plan)}</span>` : ''
   const hit = g.reached ? `<span class="chip blocked">${T.gptReached}</span>` : ''
   const info = [g.account + ' · GPT', g.email, g.plan && `${T.plan}: ${g.plan}`,
