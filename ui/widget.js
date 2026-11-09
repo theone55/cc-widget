@@ -365,14 +365,16 @@ function drawRemote() {
       `<span class="muted rago">${cut ? esc(T.stuck) : (origin && run.origin !== 'CHAT' ? esc(origin) + ' · ' : '') + ago(since(run))}</span></div>`
   }).join('')
   // collapsed (dense) layouts keep only the header: the chat's size goes there too
-  const chatHead = remoteChat && remoteChat.contextTokens != null ? ` · ${T.chat} ${kTokens(remoteChat.contextTokens)}` : ''
+  // remote switched off but a GPT call runs: none of the remote's kept state is drawn
+  const rChat = r.enabled ? remoteChat : null, rErr = r.enabled ? remoteErr : ''
+  const chatHead = rChat && rChat.contextTokens != null ? ` · ${T.chat} ${kTokens(rChat.contextTokens)}` : ''
   el.innerHTML = `<div class="rhead"><span class="tag" id="rtag">${esc(label)}</span>` +
-    `<span class="muted">${remoteRuns || gptRuns.length ? (busyN ? T.busy(busyN) : T.nothingRuns) + esc(chatHead) : ''}</span>` +
-    `${remoteErr ? `<span class="rerr" title="${esc(remoteErr)}">!</span>` : ''}</div>${chatRow(remoteChat)}${gptRows}${rows}<div class="rsys"></div>`
+    `<span class="muted">${(r.enabled && remoteRuns) || gptRuns.length ? (busyN ? T.busy(busyN) : T.nothingRuns) + esc(chatHead) : ''}</span>` +
+    `${rErr ? `<span class="rerr" title="${esc(rErr)}">!</span>` : ''}</div>${chatRow(rChat)}${gptRows}${r.enabled ? rows : ''}<div class="rsys"></div>`
   const c = r.color || PALETTE[S.accounts.length % PALETTE.length]
   const tag = $('rtag'); tag.style.color = c; tag.style.borderColor = c
   for (const i of el.querySelectorAll('.rhead ~ .row .bar i')) i.style.width = i.dataset.p + '%'
-  drawSys(el.querySelector('.rsys'), remoteSys, rHist, true)
+  drawSys(el.querySelector('.rsys'), r.enabled ? remoteSys : null, rHist, true)
   if (el.offsetHeight !== before) fit()
 }
 
