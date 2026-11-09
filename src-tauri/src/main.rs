@@ -8,6 +8,7 @@
 mod codex;
 mod counter;
 mod focus;
+mod gptruns;
 mod paths;
 mod sessions;
 mod settings;
@@ -91,6 +92,12 @@ fn detect_codex() -> Vec<String> {
 #[tauri::command]
 fn gpt_limits(state: tauri::State<AppState>) -> Vec<codex::GptLimits> {
     codex::limits(&current(&state).accounts)
+}
+
+/// GPT calls running right now (the run files of the owner's gpt-run.js).
+#[tauri::command]
+fn gpt_runs() -> Vec<gptruns::GptRun> {
+    gptruns::running()
 }
 
 #[tauri::command]
@@ -235,6 +242,7 @@ fn main() {
             limits,
             detect_codex,
             gpt_limits,
+            gpt_runs,
             statusline_status,
             statusline_connect,
             statusline_disconnect,

@@ -293,6 +293,7 @@ async function pollSystem() {
 let remoteSys = null, remoteRuns = null, remoteChat = null, remoteErr = ''
 const rHist = {cpu: [], mem: [], gpu: []}
 let remoteTimer = null
+let gptRuns = [], gptMin = 0          // GPT calls running on this PC (run files of gpt-run.js), polled with the sessions
 async function pollRemote() {
   clearTimeout(remoteTimer)
   const r = S.remote
@@ -342,10 +343,18 @@ function chatRow(c) {
 function drawRemote() {
   const el = $('remote')
   const r = S.remote
-  if (!r.enabled) { if (el.innerHTML) el.innerHTML = ''; return }
+  if (!r.enabled && !gptRuns.length) { if (el.innerHTML) el.innerHTML = ''; return }
   const before = el.offsetHeight
+  // one row per running GPT call; the text comes from files, so it only ever goes through esc()
+  const gptRows = gptRuns.map(g => {
+    const kind = g.kind === 'review' ? T.gptReview : T.gptCode
+    const tip = [`${kind} · ${g.account} · ${g.model}`, g.dir, g.task].filter(Boolean).join('\n')
+    return `<div class="row busy gptrun" title="${esc(tip)}"><span class="dot busy"></span>` +
+      `<span class="name">${esc(kind)} · ${esc(folder(g.dir) || '')}</span><span class="muted rago">${ago(g.startedAt)}</span></div>`
+  }).join('')
+  const busyN = (r.enabled ? remoteBusy() : 0) + gptRuns.length
   const since = (run) => Date.parse(run.status === 'busy' ? run.startedAt : run.finishedAt || run.startedAt) || Date.now()
-  const label = r.label || T.remote
+  const label = r.enabled ? (r.label || T.remote) : "GPT"
   const rows = (remoteRuns || []).map(run => {
     const cut = stuck(run)
     const st = cut ? 'wait' : run.status === 'busy' ? 'busy' : run.status === 'error' ? 'wait' : 'idle'
@@ -358,8 +367,8 @@ function drawRemote() {
   // collapsed (dense) layouts keep only the header: the chat's size goes there too
   const chatHead = remoteChat && remoteChat.contextTokens != null ? ` · ${T.chat} ${kTokens(remoteChat.contextTokens)}` : ''
   el.innerHTML = `<div class="rhead"><span class="tag" id="rtag">${esc(label)}</span>` +
-    `<span class="muted">${remoteRuns ? (remoteBusy() ? T.busy(remoteBusy()) : T.nothingRuns) + esc(chatHead) : ''}</span>` +
-    `${remoteErr ? `<span class="rerr" title="${esc(remoteErr)}">!</span>` : ''}</div>${chatRow(remoteChat)}${rows}<div class="rsys"></div>`
+    `<span class="muted">${remoteRuns || gptRuns.length ? (busyN ? T.busy(busyN) : T.nothingRuns) + esc(chatHead) : ''}</span>` +
+    `${remoteErr ? `<span class="rerr" title="${esc(remoteErr)}">!</span>` : ''}</div>${chatRow(remoteChat)}${gptRows}${rows}<div class="rsys"></div>`
   const c = r.color || PALETTE[S.accounts.length % PALETTE.length]
   const tag = $('rtag'); tag.style.color = c; tag.style.borderColor = c
   for (const i of el.querySelectorAll('.rhead ~ .row .bar i')) i.style.width = i.dataset.p + '%'
@@ -646,6 +655,8 @@ async function pollSessions() {
   sessions = await invoke('sessions').catch(() => [])
   limits = await invoke('limits').catch(() => [])
   gpt = await invoke('gpt_limits').catch(() => [])
+  const gr = await invoke('gpt_runs').catch(() => [])
+  if (JSON.stringify([gr, Math.floor(Date.now() / 60000)]) !== JSON.stringify([gptRuns, gptMin])) { gptMin = Math.floor(Date.now() / 60000); gptRuns = gr; if (!editing) drawRemote() }
   // forget "seen" marks of sessions that are gone
   const ids = new Set(sessions.map(s => s.sessionId))
   for (const k of Object.keys(seen)) if (!ids.has(k)) delete seen[k]
