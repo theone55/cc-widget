@@ -25,6 +25,8 @@ pub struct GptRun {
     pub task: String,
     pub pid: u32,
     pub started_at: u64,
+    /// the folder of the run file = the id of the session that started the call
+    pub session_id: String,
 }
 
 fn root() -> Option<PathBuf> {
@@ -108,6 +110,7 @@ fn inspect(path: &Path, pid: u32) -> Option<(GptRun, bool)> {
         task: text_of(&h, "task", 200),
         pid,
         started_at: started_at(&h)?,
+        session_id: String::new(),
     };
     Some((run, ended))
 }
@@ -131,7 +134,8 @@ fn scan(root: &Path, now: u64, alive: &dyn Fn(u32, u64) -> bool) -> Vec<GptRun> 
             if !fresh {
                 continue;
             }
-            let Some((run, ended)) = inspect(&file.path(), pid) else { continue };
+            let Some((mut run, ended)) = inspect(&file.path(), pid) else { continue };
+            run.session_id = sub.file_name().to_string_lossy().chars().take(100).collect();
             if !ended && now.saturating_sub(run.started_at) < MAX_AGE_MS && alive(run.pid, run.started_at) {
                 out.push(run);
             }
@@ -218,6 +222,7 @@ mod tests {
         assert_eq!(runs[1].started_at, now - 1000);
         assert_eq!(runs[1].kind, "review");
         assert_eq!(runs[1].pid, 10);
+        assert_eq!(runs[1].session_id, "sess");
         assert_eq!(runs[1].task, "<b>x</b>");
         let _ = std::fs::remove_dir_all(&d);
     }

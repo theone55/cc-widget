@@ -62,7 +62,13 @@
       {account: 'gpt-2', accountIndex: 3, email: 'free@example.com', plan: 'free', reached: false, error: null, updatedMs: now - 4 * 60000, callsDay: null,
         windows: [{mins: 43200, used: 12, resetsAt: sec + 19 * 86400}]})
   }
+  // running GPT calls (?gptruns=1): one under the billing session (its id is the run file's folder), one whose session is gone
+  const gptRuns = q.get('gptruns') === '1' ? [
+    {kind: 'code', account: 'gpt', model: 'gpt-5-codex', dir: '/home/me/work/billing', task: 'Write 3 retry tests for InvoiceService', pid: 1, startedAt: now - 83000, sessionId: 'c'},
+    {kind: 'review', account: 'gpt-2', model: 'gpt-5', dir: '/home/me/old-project', task: 'Review the last commit', pid: 2, startedAt: now - 7 * 60000, sessionId: 'gone'},
+  ] : []
   const answers = {
+    gpt_runs: () => gptRuns,
     gpt_limits: () => gpt, detect_codex: () => ['.codex', '.codex-2'],
     settings_get: () => settings, settings_set: () => null, sessions: () => sessions, limits: () => limits,
     statusline_status: ({dir}) => dir === '.claude' ? 'connected' : 'off', detect_accounts: () => ['.claude', '.claude-personal'],

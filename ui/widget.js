@@ -120,7 +120,10 @@ function render() {
 
   // sessions: one line each — status dot, name, account letter, context bar
   const many = S.accounts.filter(a => a.engine !== 'codex').length > 1
-  $('list').innerHTML = shown.length ? shown.map(s => {
+  // GPT calls whose parent session is not in the list (closed, another machine) are top-level rows
+  const shownIds = new Set(shown.map(s => s.sessionId))
+  const gptOrphans = gptRuns.filter(g => !shownIds.has(g.sessionId)).map(g => gptRunRow(g, false)).join('')
+  $('list').innerHTML = !shown.length && gptOrphans ? gptOrphans : shown.length ? shown.map(s => {
     const st = state(s)
     const ctx = s.context != null ? Math.round(s.context) : null
     const hint = ctx == null ? '' : ctx >= th.contextFull ? ' — ' + T.clear : ctx >= th.contextWarn ? ' — ' + T.compact : ''
@@ -152,8 +155,9 @@ function render() {
     </div>
     <div class="sub details">${esc(folder(s.cwd))}${s.kind === 'bg' ? ' · ' + T.bg : ''} · ${doing}${hint}</div>
     ${now ? `<div class="sub details task">▶ ${now.percent}% ${esc(now.title)}</div>` : ''}
-    ${(S.showSubagents !== false && s.subagents || []).map(subagentRow).join('')}`
-  }).join('') : `<div class="empty">${T.noSessions}</div>`
+    ${(S.showSubagents !== false && s.subagents || []).map(subagentRow).join('')}` +
+      gptRuns.filter(g => g.sessionId === s.sessionId).map(g => gptRunRow(g, true)).join('')
+  }).join('') + gptOrphans : `<div class="empty">${T.noSessions}</div>`
 
   $('counter').innerHTML = !S.counter.enabled ? '' : Array.isArray(counter)
     ? `<b>${esc(S.counter.label)}</b> ` + S.counter.fields.map((f, i) => `${esc(fieldName(f))} <b>${esc(counter[i] ?? '–')}</b>`).join(' · ')
@@ -164,6 +168,24 @@ function render() {
   paintAccounts($('view'))
   fit()
 }
+
+// a running GPT call (run file of gpt-run.js): a child row under the session that started it, like a delegate's row.
+// The text comes from files, so it only ever goes through esc(); the elapsed time ticks (tickGpt) every second.
+const elapsed = (ms) => {
+  const s = Math.max(0, Math.floor((Date.now() - ms) / 1000))
+  const p = (n) => String(n).padStart(2, '0')
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${p(Math.floor(s % 3600 / 60))}:${p(s % 60)}` : `${Math.floor(s / 60)}:${p(s % 60)}`
+}
+function gptRunRow(g, child) {
+  const kind = g.kind === 'review' ? T.gptReview : T.gptCode
+  const tip = [`${kind} · ${g.account} · ${g.model}`, g.dir, g.task].filter(Boolean).join('\n')
+  return `<div class="row busy gptrun${child ? ' child' : ''}" title="${esc(tip)}">` +
+    `<span class="bgmark busy">↳</span><span class="name">${esc(kind)} · ${esc(folder(g.dir) || '')}</span>` +
+    `<span class="chip">GPT</span><span class="prog gptel" data-since="${Number(g.startedAt) || 0}">${elapsed(Number(g.startedAt) || Date.now())}</span></div>`
+}
+setInterval(() => {
+  for (const el of document.querySelectorAll('.gptel')) el.textContent = elapsed(Number(el.dataset.since) || Date.now())
+}, 1000)
 
 // ---- GPT (Codex CLI) accounts: the windows come as the account reports them, named by their length ----
 const winLabel = (mins) => !mins ? '?' : mins < 1440 ? `${Math.round(mins / 60)}${T.hr}` : `${Math.round(mins / 1440)}${T.day}`
@@ -343,18 +365,11 @@ function chatRow(c) {
 function drawRemote() {
   const el = $('remote')
   const r = S.remote
-  if (!r.enabled && !gptRuns.length) { if (el.innerHTML) el.innerHTML = ''; return }
+  if (!r.enabled) { if (el.innerHTML) el.innerHTML = ''; return }
   const before = el.offsetHeight
-  // one row per running GPT call; the text comes from files, so it only ever goes through esc()
-  const gptRows = gptRuns.map(g => {
-    const kind = g.kind === 'review' ? T.gptReview : T.gptCode
-    const tip = [`${kind} · ${g.account} · ${g.model}`, g.dir, g.task].filter(Boolean).join('\n')
-    return `<div class="row busy gptrun" title="${esc(tip)}"><span class="dot busy"></span>` +
-      `<span class="name">${esc(kind)} · ${esc(folder(g.dir) || '')}</span><span class="muted rago">${ago(g.startedAt)}</span></div>`
-  }).join('')
-  const busyN = (r.enabled ? remoteBusy() : 0) + gptRuns.length
+  const busyN = remoteBusy()
   const since = (run) => Date.parse(run.status === 'busy' ? run.startedAt : run.finishedAt || run.startedAt) || Date.now()
-  const label = r.enabled ? (r.label || T.remote) : "GPT"
+  const label = r.label || T.remote
   const rows = (remoteRuns || []).map(run => {
     const cut = stuck(run)
     const st = cut ? 'wait' : run.status === 'busy' ? 'busy' : run.status === 'error' ? 'wait' : 'idle'
@@ -365,16 +380,15 @@ function drawRemote() {
       `<span class="muted rago">${cut ? esc(T.stuck) : (origin && run.origin !== 'CHAT' ? esc(origin) + ' · ' : '') + ago(since(run))}</span></div>`
   }).join('')
   // collapsed (dense) layouts keep only the header: the chat's size goes there too
-  // remote switched off but a GPT call runs: none of the remote's kept state is drawn
-  const rChat = r.enabled ? remoteChat : null, rErr = r.enabled ? remoteErr : ''
+  const rChat = remoteChat, rErr = remoteErr
   const chatHead = rChat && rChat.contextTokens != null ? ` · ${T.chat} ${kTokens(rChat.contextTokens)}` : ''
   el.innerHTML = `<div class="rhead"><span class="tag" id="rtag">${esc(label)}</span>` +
-    `<span class="muted">${(r.enabled && remoteRuns) || gptRuns.length ? (busyN ? T.busy(busyN) : T.nothingRuns) + esc(chatHead) : ''}</span>` +
-    `${rErr ? `<span class="rerr" title="${esc(rErr)}">!</span>` : ''}</div>${chatRow(rChat)}${gptRows}${r.enabled ? rows : ''}<div class="rsys"></div>`
+    `<span class="muted">${remoteRuns ? (busyN ? T.busy(busyN) : T.nothingRuns) + esc(chatHead) : ''}</span>` +
+    `${rErr ? `<span class="rerr" title="${esc(rErr)}">!</span>` : ''}</div>${chatRow(rChat)}${rows}<div class="rsys"></div>`
   const c = r.color || PALETTE[S.accounts.length % PALETTE.length]
   const tag = $('rtag'); tag.style.color = c; tag.style.borderColor = c
   for (const i of el.querySelectorAll('.rhead ~ .row .bar i')) i.style.width = i.dataset.p + '%'
-  drawSys(el.querySelector('.rsys'), r.enabled ? remoteSys : null, rHist, true)
+  drawSys(el.querySelector('.rsys'), remoteSys, rHist, true)
   if (el.offsetHeight !== before) fit()
 }
 
@@ -658,7 +672,7 @@ async function pollSessions() {
   limits = await invoke('limits').catch(() => [])
   gpt = await invoke('gpt_limits').catch(() => [])
   const gr = await invoke('gpt_runs').catch(() => [])
-  if (JSON.stringify([gr, Math.floor(Date.now() / 60000)]) !== JSON.stringify([gptRuns, gptMin])) { gptMin = Math.floor(Date.now() / 60000); gptRuns = gr; if (!editing) drawRemote() }
+  if (JSON.stringify([gr, Math.floor(Date.now() / 60000)]) !== JSON.stringify([gptRuns, gptMin])) { gptMin = Math.floor(Date.now() / 60000); gptRuns = gr; lastPoll = '' }
   // forget "seen" marks of sessions that are gone
   const ids = new Set(sessions.map(s => s.sessionId))
   for (const k of Object.keys(seen)) if (!ids.has(k)) delete seen[k]
