@@ -372,12 +372,14 @@ function drawRemote() {
   const label = r.label || T.remote
   const rows = (remoteRuns || []).map(run => {
     const cut = stuck(run)
-    const st = cut ? 'wait' : run.status === 'busy' ? 'busy' : run.status === 'error' ? 'wait' : 'idle'
+    // a failed run is over: grey like a finished one, never the orange of "waiting" (owner 2026-11-11 — a 15 s failure
+    // read as a run stuck for hours)
+    const st = cut ? 'wait' : run.status === 'busy' ? 'busy' : run.status === 'error' ? 'failed' : 'idle'
     const doing = cut ? T.stuckHint : `${run.status === 'busy' ? T.working : run.status === 'error' ? T.failed : T.finished} ${ago(since(run))}`
     const origin = run.origin ? (T.origins[run.origin] || run.origin) : ''
     return `<div class="row ${st}" title="${esc([run.name, origin, doing].filter(Boolean).join('\n'))}">
       <span class="dot ${st}"></span><span class="name">${esc(run.name || '#' + run.id)}</span>` +
-      `<span class="muted rago">${cut ? esc(T.stuck) : (origin && run.origin !== 'CHAT' ? esc(origin) + ' · ' : '') + ago(since(run))}</span></div>`
+      `<span class="muted rago">${cut ? esc(T.stuck) : (origin && run.origin !== 'CHAT' ? esc(origin) + ' · ' : '') + (st === 'failed' ? esc(T.failed) + ' · ' : '') + ago(since(run))}</span></div>`
   }).join('')
   // collapsed (dense) layouts keep only the header: the chat's size goes there too
   const rChat = remoteChat, rErr = remoteErr

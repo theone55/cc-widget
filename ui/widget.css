@@ -96,6 +96,7 @@ body.dense8 #limits { display: none; }
 .dot.busy { background: var(--ok); animation: pulse 1.6s steps(2, jump-none) infinite; }
 .dot.wait { background: var(--warn); }
 .dot.idle { background: var(--idle); }
+.dot.failed { background: transparent; box-shadow: inset 0 0 0 1.5px var(--idle); }
 .dot.blocked { background: var(--full); }
 /* a background session: a ↳ glyph in the account color instead of the status dot, and a chip like .tag */
 .bgmark { flex: none; width: 8px; font-size: 11px; line-height: 8px; text-align: center; color: var(--idle); }

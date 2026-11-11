@@ -47,7 +47,7 @@ window.I18N = {
     sizeHint: 'Тяните за край — вид подстроится; двойной клик по заголовку — авторазмер',
     attachHint: 'Клик: открыть терминал с `claude attach` для этой фоновой сессии',
     busy: (n) => `${n} в работе`, gptCode: 'GPT код', gptReview: 'GPT ревью', gptCall: 'идёт вызов GPT',
-    remote: 'Другая машина (необязательно)', remoteHint: 'Домашний сервер, где Claude работает без вас: его нагрузка (как «Система») и запуски Claude — отдельной группой. Токен — тот же, что у счётчика; адрес пропуска нужен для запусков.', remoteHost: 'Адрес нагрузки (JSON: threads, cores, memUsed, memTotal, gpu)', remoteRuns: 'Адрес запусков (JSON: runs[] со status, title, startedAt)', nothingRuns: 'ничего не запущено', finished: 'закончил', failed: 'ошибка', needsYou: 'ждёт разрешения',
+    remote: 'Другая машина (необязательно)', remoteHint: 'Домашний сервер, где Claude работает без вас: его нагрузка (как «Система») и запуски Claude — отдельной группой. Токен — тот же, что у счётчика; адрес пропуска нужен для запусков.', remoteHost: 'Адрес нагрузки (JSON: threads, cores, memUsed, memTotal, gpu)', remoteRuns: 'Адрес запусков (JSON: runs[] со status, title, startedAt)', nothingRuns: 'ничего не запущено', finished: 'закончил', failed: 'упал', needsYou: 'ждёт разрешения',
     chat: 'чат', chatSince: 'с', msgs: (n) => n + ' сообщ.', cacheCold: 'кэш остыл', cacheUntil: 'кэш тёплый до',
     chatNext: 'следующее сообщение в чат продолжит эту сессию (/new — новая)', chatCold: 'кэш остыл: следующее сообщение заново запишет весь контекст',
     chatLong: 'сессия длинная: каждое сообщение перечитывает её целиком — /new или «🆕 Новая с резюме»', stuck: 'прерван',

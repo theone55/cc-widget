@@ -80,6 +80,7 @@
     remote_runs: () => [
       {id: 161, name: 'Morning digest', status: 'busy', startedAt: new Date(now - 2 * 60000).toISOString(), origin: 'SCHEDULE'},
       {id: 160, name: '[order #92] widget: remote sessions', status: 'done', startedAt: new Date(now - 40 * 60000).toISOString(), finishedAt: new Date(now - 12 * 60000).toISOString(), origin: 'ORDER'},
+      {id: 159, name: 'release-followup v2.9.0', status: 'error', startedAt: new Date(now - 160 * 60000).toISOString(), finishedAt: new Date(now - 159 * 60000).toISOString(), origin: 'ORDER'},
     ],
   }
   window.__TAURI__ = {
