@@ -8,6 +8,7 @@
 mod codex;
 mod counter;
 mod focus;
+mod gemini;
 mod gptruns;
 mod paths;
 mod sessions;
@@ -92,6 +93,12 @@ fn detect_codex() -> Vec<String> {
 #[tauri::command]
 fn gpt_limits(state: tauri::State<AppState>) -> Vec<codex::GptLimits> {
     codex::limits(&current(&state).accounts)
+}
+
+/// The Gemini (Antigravity `agy`) limits: empty when agy is not installed; a probe runs in the background.
+#[tauri::command]
+fn gemini_limits() -> Vec<gemini::Gemini> {
+    gemini::limits()
 }
 
 /// GPT calls running right now (the run files of the owner's gpt-run.js).
@@ -242,6 +249,7 @@ fn main() {
             limits,
             detect_codex,
             gpt_limits,
+            gemini_limits,
             gpt_runs,
             statusline_status,
             statusline_connect,

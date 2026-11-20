@@ -12,6 +12,7 @@ let S = null              // the settings (Rust's settings.rs)
 let seen = load('seen', {})
 let sessions = []
 let limits = []
+let gemini = []           // Gemini (agy) limits: [] or one entry (gemini.rs Gemini)
 let gpt = []              // the GPT (Codex) accounts' limits (codex.rs GptLimits)
 let counter = null        // [values] | 'no-token' | 'error…' | null
 let sys = null            // the System section's last numbers (system.rs Stats) or null
@@ -115,7 +116,7 @@ function render() {
       ${lim(T.h5, l.five_hour)}${lim(T.d7, l.seven_day)}</div>
       ${resets ? `<div class="resets details">${T.resets}: ${resets}</div>` : ''}`
   })
-  const rows = [...claudeRows, ...gpt.map(gptRow)]
+  const rows = [...claudeRows, ...gpt.map(gptRow), ...gemini.map(geminiRow)]
   $('limits').innerHTML = !S.showLimits ? '' : rows.length ? rows.join('') : `<div class="empty">${T.limitsLater}</div>`
 
   // sessions: one line each — status dot, name, account letter, context bar
@@ -209,6 +210,29 @@ function gptRow(g) {
     : '<span class="muted">…</span>'
   const resets = wins.filter(w => gptFresh(w) && w.resetsAt).map(w => `${winLabel(w.mins)} ${T.in} ${left(w.resetsAt)}`).join(' · ')
   return `<div class="lim gpt" title="${esc(info)}"><span class="tag gpt" data-acc="${g.accountIndex}">${label}</span>${body}${hit}${plan}</div>
+    ${resets ? `<div class="resets details">${T.resets}: ${resets}</div>` : ''}`
+}
+
+// ---- Gemini (Antigravity CLI agy): one row, a bar per model group; no agy installed = the backend sends nothing ----
+const gemError = (e) => e === 'timeout' ? T.gemTimeout : e === 'no-agy' ? T.gemNoAgy : e
+function geminiRow(g) {
+  const th = S.thresholds
+  const bs = (g.buckets || []).map(b => {
+    const at = b.resetTime ? Date.parse(b.resetTime) / 1000 : null     // epoch seconds, NaN when unparsable
+    const reset = at && at * 1000 > Date.now() ? at : null
+    // a bucket whose reset time has passed is 0%, like the other windows
+    const p = at && !reset ? 0 : Math.round(b.used)
+    const win = b.mins ? winLabel(b.mins) : b.name
+    return {label: b.group, win, p, reset}
+  })
+  const info = ['gemini · Antigravity',
+    ...bs.map(b => `${b.label} (${b.win}): ${b.p}%` + (b.reset ? ` · ${T.resets} ${T.in} ${left(b.reset)}` : '')),
+    g.error && gemError(g.error), g.updatedMs && `${T.dataAge}: ${ago(g.updatedMs)}`].filter(Boolean).join('\n')
+  const body = g.error ? `<span class="muted gerr">${esc(gemError(g.error))}</span>`
+    : bs.length ? bs.map(b => `<span class="lbl">${esc(b.label)}</span>${bar(b.p, th.limitWarn, th.limitFull)}<span class="pct">${b.p}%</span>`).join('')
+    : '<span class="muted">…</span>'
+  const resets = bs.filter(b => b.reset).map(b => `${esc(b.label)} ${T.in} ${left(b.reset)}`).join(' · ')
+  return `<div class="lim gpt" title="${esc(info)}"><span class="tag gemini${g.error ? ' off' : ''}">gemini</span>${body}</div>
     ${resets ? `<div class="resets details">${T.resets}: ${resets}</div>` : ''}`
 }
 
@@ -673,6 +697,7 @@ async function pollSessions() {
   sessions = await invoke('sessions').catch(() => [])
   limits = await invoke('limits').catch(() => [])
   gpt = await invoke('gpt_limits').catch(() => [])
+  gemini = await invoke('gemini_limits').catch(() => [])
   const gr = await invoke('gpt_runs').catch(() => [])
   if (JSON.stringify([gr, Math.floor(Date.now() / 60000)]) !== JSON.stringify([gptRuns, gptMin])) { gptMin = Math.floor(Date.now() / 60000); gptRuns = gr; lastPoll = '' }
   // forget "seen" marks of sessions that are gone
@@ -680,7 +705,7 @@ async function pollSessions() {
   for (const k of Object.keys(seen)) if (!ids.has(k)) delete seen[k]
   save('seen', seen)
   // redraw only when something changed (the ages in the details tick by the minute)
-  const key = JSON.stringify([sessions, limits, gpt, Math.floor(Date.now() / 60000)])
+  const key = JSON.stringify([sessions, limits, gpt, gemini, Math.floor(Date.now() / 60000)])
   if (key === lastPoll) return
   lastPoll = key
   render()
