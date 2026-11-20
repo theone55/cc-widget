@@ -126,6 +126,7 @@ fn probe(exe: PathBuf) -> Gemini {
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
     let Ok(child) = cmd.spawn() else { return fail("no-agy") };
+    let pid = child.id();
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
         let _ = tx.send(child.wait_with_output());
@@ -145,8 +146,23 @@ fn probe(exe: PathBuf) -> Gemini {
             fail(err.trim().chars().take(160).collect::<String>().as_str()).with_default_error(out.status.code())
         }
         Ok(Err(_)) => fail("no-agy"),
-        Err(_) => fail("timeout"),
+        Err(_) => {
+            // a hung agy must not stay behind: one more would pile up every 5 minutes
+            kill_tree(pid);
+            fail("timeout")
+        }
     }
+}
+
+#[cfg(windows)]
+fn kill_tree(pid: u32) {
+    use std::os::windows::process::CommandExt;
+    let _ = Command::new("taskkill").args(["/PID", &pid.to_string(), "/T", "/F"]).stdout(Stdio::null()).stderr(Stdio::null())
+        .creation_flags(0x0800_0000).status();
+}
+#[cfg(not(windows))]
+fn kill_tree(pid: u32) {
+    let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
 }
 
 impl Gemini {
@@ -217,6 +233,15 @@ mod tests {
         assert_eq!(parse_output("", 1).error.as_deref(), Some("no answer"));
         // SUCCESS without groups is still not usable
         assert!(parse_output(r#"{"status":"SUCCESS"}"#, 1).error.is_some());
+    }
+
+    /// the real agy on this machine: cargo test real_agy -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn real_agy() {
+        let g = probe(exe().expect("agy not installed"));
+        println!("{g:?}");
+        assert!(g.error.is_none() && !g.buckets.is_empty());
     }
 
     #[test]
