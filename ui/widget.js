@@ -422,8 +422,8 @@ function drawRemote() {
 // follows what the widget shows. Yours (an edge dragged): the width AND the height stay exactly where you let go — the
 // layout is the least dense one that fits that height, picked live while you drag, so what you see while dragging is
 // what stays (owner 2026-10-17). Room to spare: the System cards grow into it, or it stays empty. The window can't be
-// dragged smaller than the densest layout (its minimum follows the content); content that outgrows even that (a new
-// session) makes the window grow. Narrow widths drop side notes and numbers (CSS). No scrolling.
+// dragged smaller than the densest layout (its minimum follows the content). The layout picked at let-go stays: content
+// that outgrows the height later (a new session) makes the window grow, it never folds the layout denser. Narrow widths drop side notes and numbers (CSS). No scrolling.
 // The layouts, each a step denser (CSS body.denseN, cumulative, gentle first): 1 shorter cards → 2 no details →
 // 3 tighter rows → 4 System as one line → 5 sessions as chips → 6 limits as text → 7 no System, dots → 8 no limits.
 let fixed = null                     // {w, h} — your size, or null = automatic (settings.size)
@@ -475,7 +475,10 @@ async function fit() {
       fixed.h = Math.round(natural())
       invoke('size_set', {size: {w: fixed.w, h: fixed.h, level: 0}}).catch(() => {})
     }
-    levelFor(fixed.h)
+    // the layout you picked by dragging stays: new content (a session, a run) grows the window instead of folding
+    // the layout denser — System collapsed into one line when sessions were added (owner 2026-11-22)
+    if (fixed.level == null) fixed.level = levelFor(fixed.h)
+    else setLevel(fixed.level)
     w = fixed.w
     h = Math.max(fixed.h, min, natural())
   } else {
@@ -749,7 +752,8 @@ async function pollCounter() {
     // let go → nothing moves (the layout is already the one for this height); the size is saved once, not every step
     dragging = setTimeout(() => {
       dragging = null
-      invoke('size_set', {size: {...size, level: levelFor(size.h)}}).catch(() => {})
+      size.level = levelFor(size.h)
+      invoke('size_set', {size}).catch(() => {})
       fit()
     }, 450)
     requestAnimationFrame(() => levelFor(size.h))
