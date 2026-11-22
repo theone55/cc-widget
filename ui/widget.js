@@ -97,6 +97,16 @@ async function applyEffects() {
 }
 
 // ---- the widget ----
+// Markup equal to what is already shown is not set again: rebuilding every block on each 2 s poll re-created the bars
+// (they grew from 0 again) and the acrylic window visibly lost its picture and redrew it (owner 2026-11-22).
+// Returns whether the markup was replaced (callers skip their style fix-ups otherwise).
+function setHtml(el, html) {
+  if (el._html === html) return false
+  el._html = html
+  el.innerHTML = html
+  return true
+}
+
 function render() {
   if (!S || editing) return
   const shown = sessions.filter(s => S.showBackground || s.kind !== 'bg')
@@ -108,11 +118,11 @@ function render() {
   document.body.classList.toggle('open', !!S.expanded)
 
   const values = Array.isArray(counter) ? counter.map(v => v ?? '–').join(' / ') : ''
-  $('head').innerHTML =
+  setHtml($('head'),
     `<span class="dot ${blocked ? 'blocked' : wait ? 'wait' : busy ? 'busy' : 'idle'}" data-tauri-drag-region title="${T.sizeHint}"></span>` +
     `<span data-tauri-drag-region>${wait ? T.waiting(wait) : T.nobodyWaits}${busy ? ` <span class="muted">·</span> ${T.busy(busy)}` : ''}</span>` +
     `<span class="right">${values ? `<span class="counter-head" data-tauri-drag-region title="${esc(counterInfo())}">${esc(S.counter.label ? S.counter.label + ' ' : '')}${esc(values)}</span>` : ''}` +
-    `<button class="gear" id="gear" title="${T.settings}">⚙</button></span>`
+    `<button class="gear" id="gear" title="${T.settings}">⚙</button></span>`)
 
   // limits: one block per account (a limit belongs to the account; every session of it spends the same one)
   const th = S.thresholds
@@ -133,14 +143,14 @@ function render() {
       ${resets ? `<div class="resets details">${T.resets}: ${resets}</div>` : ''}`
   })
   const rows = [...claudeRows, ...gpt.map(gptRow), ...gemini.map(geminiRow)]
-  $('limits').innerHTML = !S.showLimits ? '' : heading(T.secLimits) + (rows.length ? rows.join('') : `<div class="empty">${T.limitsLater}</div>`)
+  setHtml($('limits'), !S.showLimits ? '' : heading(T.secLimits) + (rows.length ? rows.join('') : `<div class="empty">${T.limitsLater}</div>`))
 
   // sessions: one line each — status dot, name, account letter, context bar
   const many = S.accounts.filter(a => a.engine !== 'codex').length > 1
   // GPT calls whose parent session is not in the list (closed, another machine) are top-level rows
   const shownIds = new Set(shown.map(s => s.sessionId))
   const gptOrphans = gptRuns.filter(g => !shownIds.has(g.sessionId)).map(g => gptRunRow(g, false)).join('')
-  $('list').innerHTML = heading(T.secSessions) + (!shown.length && gptOrphans ? gptOrphans : shown.length ? shown.map(s => {
+  setHtml($('list'), heading(T.secSessions) + (!shown.length && gptOrphans ? gptOrphans : shown.length ? shown.map(s => {
     const st = state(s)
     const ctx = s.context != null ? Math.round(s.context) : null
     const hint = ctx == null ? '' : ctx >= th.contextFull ? ' — ' + T.clear : ctx >= th.contextWarn ? ' — ' + T.compact : ''
@@ -174,11 +184,11 @@ function render() {
     ${now ? `<div class="sub details task">▶ ${now.percent}% ${esc(now.title)}</div>` : ''}
     ${(S.showSubagents !== false && s.subagents || []).map(subagentRow).join('')}` +
       gptRuns.filter(g => g.sessionId === s.sessionId).map(g => gptRunRow(g, true)).join('')
-  }).join('') + gptOrphans : `<div class="empty">${T.noSessions}</div>`)
+  }).join('') + gptOrphans : `<div class="empty">${T.noSessions}</div>`))
 
-  $('counter').innerHTML = !S.counter.enabled ? '' : Array.isArray(counter)
+  setHtml($('counter'), !S.counter.enabled ? '' : Array.isArray(counter)
     ? `<b>${esc(S.counter.label)}</b> ` + S.counter.fields.map((f, i) => `${esc(fieldName(f))} <b>${esc(counter[i] ?? '–')}</b>`).join(' · ')
-    : `<b>${esc(S.counter.label)}</b> <span class="muted">${esc(counter === 'no-token' ? T.token + ': ' + T.tokenNone : counter || '…')}</span>`
+    : `<b>${esc(S.counter.label)}</b> <span class="muted">${esc(counter === 'no-token' ? T.token + ': ' + T.tokenNone : counter || '…')}</span>`)
 
   drawSystem()
   for (const i of document.querySelectorAll('.bar i')) i.style.width = i.dataset.p + '%'
@@ -298,7 +308,7 @@ function drawSystem() {
 }
 // the cards + cores + one-line form of `sys` (this machine's or the remote one's) into `el`; hist = their 2 minutes
 function drawSys(el, sys, hist, threadsOn, title = '') {
-  if (!sys) { if (el.innerHTML) el.innerHTML = ''; return }
+  if (!sys) { setHtml(el, ''); return }
   const before = el.offsetHeight
   const cpu = Math.round(sys.cpu)
   const memP = sys.memTotal ? sys.memUsed / sys.memTotal * 100 : 0
@@ -326,8 +336,9 @@ function drawSys(el, sys, hist, threadsOn, title = '') {
   // the same numbers as one line, for the denser layouts (CSS shows it instead of the cards)
   const item = (label, p, text) => `<span class="si" title="${esc(tip[label.toLowerCase()])}"><b>${label}</b>${bar(p, 70, 90)}<span class="pct">${text}</span></span>`
   const line = `<div class="sysline">${item('CPU', cpu, cpu + '%')}${item('RAM', memP, Math.round(memP) + '%')}${g ? item('GPU', g.load, Math.round(g.load) + '%') : ''}</div>`
-  el.innerHTML = `${title ? heading(title) : ''}<div class="scards${g ? '' : ' two'}">${cards}</div>${cores}${line}`
-  for (const i of el.querySelectorAll('.bar i')) i.style.width = i.dataset.p + '%'
+  if (!setHtml(el, `${title ? heading(title) : ''}<div class="scards${g ? '' : ' two'}">${cards}</div>${cores}${line}`)) return
+  // the load changes on every poll, so these bars are new each time: no width transition, or they grow from 0 every 2 s
+  for (const i of el.querySelectorAll('.bar i')) { i.style.transition = 'none'; i.style.width = i.dataset.p + '%' }
   for (const c of el.querySelectorAll('.scard')) c.style.setProperty('--c', SYS_COLORS[c.dataset.c])
   for (const f of el.querySelectorAll('.sfill, .core i')) f.style.height = f.dataset.h + '%'
   const grid = el.querySelector('.cores')
@@ -405,7 +416,7 @@ function chatRow(c) {
 function drawRemote() {
   const el = $('remote')
   const r = S.remote
-  if (!r.enabled) { if (el.innerHTML) el.innerHTML = ''; return }
+  if (!r.enabled) { setHtml(el, ''); return }
   const before = el.offsetHeight
   const busyN = remoteBusy()
   const since = (run) => Date.parse(run.status === 'busy' ? run.startedAt : run.finishedAt || run.startedAt) || Date.now()
@@ -424,12 +435,14 @@ function drawRemote() {
   // collapsed (dense) layouts keep only the header: the chat's size goes there too
   const rChat = remoteChat, rErr = remoteErr
   const chatHead = rChat && rChat.contextTokens != null ? ` · ${T.chat} ${kTokens(rChat.contextTokens)}` : ''
-  el.innerHTML = `<div class="rhead"><span class="tag" id="rtag">${esc(label)}</span>` +
+  // the load block below keeps its own markup cache, so an unchanged head leaves it in place
+  if (setHtml(el, `<div class="rhead"><span class="tag" id="rtag">${esc(label)}</span>` +
     `<span class="muted">${remoteRuns ? (busyN ? T.busy(busyN) : T.nothingRuns) + esc(chatHead) : ''}</span>` +
-    `${rErr ? `<span class="rerr" title="${esc(rErr)}">!</span>` : ''}</div>${chatRow(rChat)}${rows}<div class="rsys"></div>`
-  const c = r.color || PALETTE[S.accounts.length % PALETTE.length]
-  const tag = $('rtag'); tag.style.color = c; tag.style.borderColor = c
-  for (const i of el.querySelectorAll('.rhead ~ .row .bar i')) i.style.width = i.dataset.p + '%'
+    `${rErr ? `<span class="rerr" title="${esc(rErr)}">!</span>` : ''}</div>${chatRow(rChat)}${rows}<div class="rsys"></div>`)) {
+    const c = r.color || PALETTE[S.accounts.length % PALETTE.length]
+    const tag = $('rtag'); tag.style.color = c; tag.style.borderColor = c
+    for (const i of el.querySelectorAll('.rhead ~ .row .bar i')) i.style.width = i.dataset.p + '%'
+  }
   drawSys(el.querySelector('.rsys'), remoteSys, rHist, true)
   if (el.offsetHeight !== before) fit()
 }
