@@ -33,7 +33,7 @@
 html, body { margin: 0; background: transparent; color: var(--text);
   font: 12px/1.4 "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
   font-variant-numeric: tabular-nums; overflow: hidden; user-select: none; }
-#box { background: var(--bg); border: 1px solid var(--border); border-radius: 13px; box-sizing: border-box; padding: 4px 12px 6px;
+#box { background: var(--bg); border: 1px solid var(--border); border-radius: 13px; box-sizing: border-box; padding: 4px 8px 6px;
   height: 100vh; display: flex; flex-direction: column; }
 #view { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 #view > .section { flex: none; }
@@ -149,6 +149,9 @@ body.dense8 #limits { display: none; }
 /* Gemini (agy): its own colour, dashed like the GPT tag; greyed when the probe failed */
 .tag.gemini { border-style: dashed; color: #64cfff; border-color: #64cfff; }
 .tag.gemini.off { color: var(--muted); border-color: var(--border); }
+:root.light .tag:not(.gpt):not(.gemini) { background: color-mix(in srgb, currentColor 21%, transparent);
+  /* the account color is inline (beats any color rule here), so darken the whole tag instead */
+  filter: brightness(0.72); }
 :root.light .tag.gemini { color: #0a7fb3; border-color: #0a7fb3; }
 .lim.gpt .lbl { width: auto; min-width: 16px; }
 .lim .gerr { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
