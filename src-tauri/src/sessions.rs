@@ -176,15 +176,42 @@ fn last_model(path: &std::path::Path) -> Option<String> {
     found
 }
 
-/// A session's model: the transcript `projects/<key>/<session id>.jsonl` (probed in every project folder, like the subagents').
-fn session_model(dir: &std::path::Path, session_id: &str) -> Option<String> {
+/// The `projects/<key>` folder that holds a session's transcript (`<session id>.jsonl`) and its `<session id>/subagents`.
+/// The key comes from the cwd (a worktree session changes it), so every project folder is probed — hundreds of stats
+/// per session, which burned half a core when done on every 2 s poll. A found folder is remembered for good; a miss
+/// is not retried for a while.
+fn project_of(dir: &std::path::Path, session_id: &str) -> Option<std::path::PathBuf> {
+    type Cache = std::collections::HashMap<(std::path::PathBuf, String), (std::time::Instant, Option<std::path::PathBuf>)>;
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<Cache>> = std::sync::OnceLock::new();
+    const RETRY: std::time::Duration = std::time::Duration::from_secs(30);
     if !safe_id(session_id) {
         return None;
     }
-    std::fs::read_dir(dir.join("projects")).ok()?.flatten().find_map(|p| {
-        let t = p.path().join(format!("{session_id}.jsonl"));
-        t.is_file().then(|| last_model(&t)).flatten()
-    })
+    let cache = CACHE.get_or_init(Default::default);
+    let key = (dir.to_path_buf(), session_id.to_string());
+    if let Some((at, found)) = cache.lock().ok()?.get(&key) {
+        match found {
+            Some(p) if p.join(format!("{session_id}.jsonl")).is_file() || p.join(session_id).is_dir() => return Some(p.clone()),
+            None if at.elapsed() < RETRY => return None,
+            _ => {}
+        }
+    }
+    let found = std::fs::read_dir(dir.join("projects")).ok().and_then(|ps| {
+        ps.flatten().map(|p| p.path()).find(|p| p.join(format!("{session_id}.jsonl")).is_file() || p.join(session_id).is_dir())
+    });
+    if let Ok(mut c) = cache.lock() {
+        if c.len() > 200 {
+            c.clear();
+        }
+        c.insert(key, (std::time::Instant::now(), found.clone()));
+    }
+    found
+}
+
+/// A session's model: the last assistant message of its transcript `projects/<key>/<session id>.jsonl`.
+fn session_model(dir: &std::path::Path, session_id: &str) -> Option<String> {
+    let t = project_of(dir, session_id)?.join(format!("{session_id}.jsonl"));
+    t.is_file().then(|| last_model(&t)).flatten()
 }
 
 fn ms(t: std::time::SystemTime) -> u64 {
@@ -201,10 +228,10 @@ fn subagents(dir: &std::path::Path, session_id: &str, now: u64) -> Vec<Subagent>
     if !safe_id(session_id) {
         return vec![];
     }
-    let Ok(projects) = std::fs::read_dir(dir.join("projects")) else { return vec![] };
+    let Some(project) = project_of(dir, session_id) else { return vec![] };
     let mut out = vec![];
-    for project in projects.flatten() {
-        let Ok(files) = std::fs::read_dir(project.path().join(session_id).join("subagents")) else { continue };
+    {
+        let Ok(files) = std::fs::read_dir(project.join(session_id).join("subagents")) else { return vec![] };
         for f in files.flatten() {
             let path = f.path();
             let Some(stem) = path.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".meta.json")) else { continue };
@@ -296,17 +323,40 @@ fn context_used(session_id: &str) -> Option<f64> {
     serde_json::from_str::<CtxFile>(&text).ok()?.used_pct
 }
 
+/// Is the process running? On Windows one OpenProcess call: sysinfo's per-pid refresh still walks the whole process
+/// table there (~260 ms each, a core burned by the 2 s poll).
+#[cfg(windows)]
+fn pid_alive(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED};
+    use windows_sys::Win32::System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    const STILL_ACTIVE: u32 = 259;
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h.is_null() {
+            // denied = it exists but isn't ours to look at; anything else (invalid parameter) = gone
+            return GetLastError() == ERROR_ACCESS_DENIED;
+        }
+        let mut code = 0u32;
+        let ok = GetExitCodeProcess(h, &mut code) != 0;
+        CloseHandle(h);
+        !ok || code == STILL_ACTIVE
+    }
+}
+
+#[cfg(not(windows))]
+fn pid_alive(pid: u32) -> bool {
+    let mut sys = sysinfo::System::new();
+    let p = sysinfo::Pid::from_u32(pid);
+    sys.refresh_processes_specifics(sysinfo::ProcessesToUpdate::Some(&[p]), true, sysinfo::ProcessRefreshKind::nothing());
+    sys.process(p).is_some()
+}
+
 /// The sessions of every account whose process is still alive (a crashed session leaves its file behind),
 /// the most recently changed first.
 pub fn read(accounts: &[Account]) -> Vec<Session> {
     // Liveness is checked per session pid (below), never by scanning every process on the PC: a full scan every
     // 2 s poll cost a whole core with ~100 browser processes around.
-    let alive = |pid: u32| {
-        let mut sys = sysinfo::System::new();
-        let p = sysinfo::Pid::from_u32(pid);
-        sys.refresh_processes_specifics(sysinfo::ProcessesToUpdate::Some(&[p]), true, sysinfo::ProcessRefreshKind::nothing());
-        sys.process(p).is_some()
-    };
+    let alive = pid_alive;
     let mut out = vec![];
     for (index, account) in accounts.iter().enumerate() {
         // a GPT account has no sessions here (yet)
@@ -426,6 +476,23 @@ pub fn limits(accounts: &[Account]) -> Vec<Limits> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore]
+    fn timing_real() {
+        let accs: Vec<Account> = [".claude", ".claude-personal", ".claude-own"]
+            .iter()
+            .map(|d| Account { label: d.to_string(), dir: d.to_string(), color: String::new(), engine: "claude".into() })
+            .collect();
+        let mut n = read(&accs).len();
+        let t = std::time::Instant::now();
+        for _ in 0..5 {
+            n = read(&accs).len();
+        }
+        eprintln!("read x5: {:?} sessions={n}", t.elapsed());
+        assert!(pid_alive(std::process::id()));
+        assert!(!pid_alive(4_000_000));
+    }
 
     #[test]
     fn job_state_blocked_or_not() {
