@@ -152,7 +152,7 @@ body.dense8 #limits { display: none; }
 :root.light .tag:not(.gpt):not(.gemini) { background: color-mix(in srgb, currentColor 21%, transparent);
   /* the account color is inline (beats any color rule here), so darken the whole tag instead */
   filter: brightness(0.72); }
-:root.light .tag.gemini { color: #0a7fb3; border-color: #0a7fb3; }
+:root.light .tag.gemini:not(.off) { color: #0a7fb3; border-color: #0a7fb3; }
 .lim.gpt .lbl { width: auto; min-width: 16px; }
 .lim .gerr { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip.plan { text-transform: uppercase; letter-spacing: 0.04em; }

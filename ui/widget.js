@@ -473,6 +473,7 @@ async function fit() {
     if (fixed.h == null) {
       setLevel(0)
       fixed.h = Math.round(natural())
+      fixed.level = 0
       invoke('size_set', {size: {w: fixed.w, h: fixed.h, level: 0}}).catch(() => {})
     }
     // the layout you picked by dragging stays: new content (a session, a run) grows the window instead of folding
