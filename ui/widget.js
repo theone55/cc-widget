@@ -46,6 +46,11 @@ const left = (sec) => {
 const level = (p, warn, full) => p >= full ? 'full' : p >= warn ? 'hot' : ''
 // a bar's fill: the width goes in from JS after render (data-p), the class picks the color
 const bar = (p, warn, full) => `<span class="bar"><i class="${level(p, warn, full)}" data-p="${Math.min(100, Math.max(0, p))}"></i></span>`
+// a section's title (Fluent look); a denser layout hides it (CSS)
+const heading = (t) => `<h2 class="sh">${esc(t)}</h2>`
+// one limit window: its label and % on a line, a thin bar under them (grid cell of .lim)
+const winCell = (label, p, warn, full) =>
+  `<span class="win"><span class="lbl">${label}</span><span class="pct ${level(p, warn, full)}">${p}%</span>${bar(p, warn, full)}</span>`
 // each account's color: its own from the settings, or the palette's by position
 // a counter field is "path" or "name=path" (visitors.today, today=visitors.today)
 const fieldName = (f) => f.includes('=') ? f.split('=')[0].trim() : f.split('.').pop()
@@ -77,6 +82,20 @@ function applyLook(look = S) {
 }
 dark.addEventListener('change', () => { if (S) { applyLook(); render() } })
 
+// Windows 11: a real acrylic backdrop (the desktop blurred behind the panel); --alpha then tints it. Windows 10, macOS
+// and Linux (or a window that refuses the effect) keep the plain translucent surface. Win 11 rounds a window by 8 px
+// itself, so the CSS radius follows (the .fx class) — a bigger one would show the blur outside the border.
+async function applyEffects() {
+  try {
+    const ua = navigator.userAgentData
+    if (!ua || ua.platform !== 'Windows') return
+    const v = await ua.getHighEntropyValues(['platformVersion'])
+    if (parseInt(v.platformVersion, 10) < 13) return      // Windows 10 reports 10.x, Windows 11 13+
+    await win.setEffects({effects: ['acrylic']})
+    document.documentElement.classList.add('fx')
+  } catch (e) {}
+}
+
 // ---- the widget ----
 function render() {
   if (!S || editing) return
@@ -99,10 +118,7 @@ function render() {
   const th = S.thresholds
   // a window Claude Code didn't send (nothing used in it yet) or whose reset time has passed = 0%, not a gap
   const fresh = (b) => b && b.used_percentage != null && !(b.resets_at && b.resets_at * 1000 < Date.now())
-  const lim = (label, b) => {
-    const p = fresh(b) ? Math.round(b.used_percentage) : 0
-    return `<span class="lbl">${label}</span>${bar(p, th.limitWarn, th.limitFull)}<span class="pct">${p}%</span>`
-  }
+  const lim = (label, b) => winCell(label, fresh(b) ? Math.round(b.used_percentage) : 0, th.limitWarn, th.limitFull)
   // the whole line's tooltip says everything (owner 2026-10-17: a dense layout hides the words, a hover brings them)
   const limInfo = (label, b) => {
     const p = fresh(b) ? Math.round(b.used_percentage) : 0
@@ -117,14 +133,14 @@ function render() {
       ${resets ? `<div class="resets details">${T.resets}: ${resets}</div>` : ''}`
   })
   const rows = [...claudeRows, ...gpt.map(gptRow), ...gemini.map(geminiRow)]
-  $('limits').innerHTML = !S.showLimits ? '' : rows.length ? rows.join('') : `<div class="empty">${T.limitsLater}</div>`
+  $('limits').innerHTML = !S.showLimits ? '' : heading(T.secLimits) + (rows.length ? rows.join('') : `<div class="empty">${T.limitsLater}</div>`)
 
   // sessions: one line each — status dot, name, account letter, context bar
   const many = S.accounts.filter(a => a.engine !== 'codex').length > 1
   // GPT calls whose parent session is not in the list (closed, another machine) are top-level rows
   const shownIds = new Set(shown.map(s => s.sessionId))
   const gptOrphans = gptRuns.filter(g => !shownIds.has(g.sessionId)).map(g => gptRunRow(g, false)).join('')
-  $('list').innerHTML = !shown.length && gptOrphans ? gptOrphans : shown.length ? shown.map(s => {
+  $('list').innerHTML = heading(T.secSessions) + (!shown.length && gptOrphans ? gptOrphans : shown.length ? shown.map(s => {
     const st = state(s)
     const ctx = s.context != null ? Math.round(s.context) : null
     const hint = ctx == null ? '' : ctx >= th.contextFull ? ' — ' + T.clear : ctx >= th.contextWarn ? ' — ' + T.compact : ''
@@ -152,13 +168,13 @@ function render() {
       ${p ? `<span class="prog">${p.done}/${p.tasks.length} · ${p.overall}%</span>` : ''}
       ${many ? `<span class="letter" data-acc="${s.accountIndex}">${esc((s.account || '?').slice(0, 1).toUpperCase())}</span>` : ''}
       ${S.showContext ? `<span class="ctxbar">${ctx != null
-        ? bar(ctx, th.contextWarn, th.contextFull) + `<span class="pct">${ctx}%</span>` : '<span class="muted">—</span>'}</span>` : ''}
+        ? bar(ctx, th.contextWarn, th.contextFull) + `<span class="pct ${level(ctx, th.contextWarn, th.contextFull)}">${ctx}%</span>` : '<span class="muted">—</span>'}</span>` : ''}
     </div>
     <div class="sub details">${esc(folder(s.cwd))}${s.kind === 'bg' ? ' · ' + T.bg : ''} · ${doing}${hint}</div>
     ${now ? `<div class="sub details task">▶ ${now.percent}% ${esc(now.title)}</div>` : ''}
     ${(S.showSubagents !== false && s.subagents || []).map(subagentRow).join('')}` +
       gptRuns.filter(g => g.sessionId === s.sessionId).map(g => gptRunRow(g, true)).join('')
-  }).join('') + gptOrphans : `<div class="empty">${T.noSessions}</div>`
+  }).join('') + gptOrphans : `<div class="empty">${T.noSessions}</div>`)
 
   $('counter').innerHTML = !S.counter.enabled ? '' : Array.isArray(counter)
     ? `<b>${esc(S.counter.label)}</b> ` + S.counter.fields.map((f, i) => `${esc(fieldName(f))} <b>${esc(counter[i] ?? '–')}</b>`).join(' · ')
@@ -206,7 +222,7 @@ function gptRow(g) {
     g.error && gptError(g.error), g.reached && T.gptReached,
     g.updatedMs && `${T.dataAge}: ${ago(g.updatedMs)}`, g.callsDay != null && `${T.callsDay}: ${g.callsDay}`].filter(Boolean).join('\n')
   const body = g.error ? `<span class="muted gerr">${esc(gptError(g.error))}</span>`
-    : wins.length ? wins.map(w => `<span class="lbl">${winLabel(w.mins)}</span>${bar(gptPct(w), th.limitWarn, th.limitFull)}<span class="pct">${gptPct(w)}%</span>`).join('')
+    : wins.length ? wins.map(w => winCell(winLabel(w.mins), gptPct(w), th.limitWarn, th.limitFull)).join('')
     : '<span class="muted">…</span>'
   const resets = wins.filter(w => gptFresh(w) && w.resetsAt).map(w => `${winLabel(w.mins)} ${T.in} ${left(w.resetsAt)}`).join(' · ')
   return `<div class="lim gpt" title="${esc(info)}"><span class="tag gpt" data-acc="${g.accountIndex}">${label}</span>${body}${hit}${plan}</div>
@@ -229,7 +245,7 @@ function geminiRow(g) {
     ...bs.map(b => `${b.label} (${b.win}): ${b.p}%` + (b.reset ? ` · ${T.resets} ${T.in} ${left(b.reset)}` : '')),
     g.error && gemError(g.error), g.updatedMs && `${T.dataAge}: ${ago(g.updatedMs)}`].filter(Boolean).join('\n')
   const body = g.error ? `<span class="muted gerr">${esc(gemError(g.error))}</span>`
-    : bs.length ? bs.map(b => `<span class="lbl">${esc(b.label)}</span>${bar(b.p, th.limitWarn, th.limitFull)}<span class="pct">${b.p}%</span>`).join('')
+    : bs.length ? bs.map(b => winCell(esc(b.label), b.p, th.limitWarn, th.limitFull)).join('')
     : '<span class="muted">…</span>'
   const resets = bs.filter(b => b.reset).map(b => `${esc(b.label)} ${T.in} ${left(b.reset)}`).join(' · ')
   return `<div class="lim gpt" title="${esc(info)}"><span class="tag gemini${g.error ? ' off' : ''}">gemini</span>${body}</div>
@@ -274,14 +290,14 @@ const histLine = (h, top) => h.map((v, i) => `${((i + 60 - h.length) * 100 / 59)
 function sysCard(key, label, right, value, sub, now, hist, top, title = '') {
   return `<div class="scard" data-c="${key}" title="${esc(title)}">
     <div class="sfill" data-h="${Math.max(3, Math.min(now, top) / top * 90)}"></div>
-    ${hist.length > 1 ? `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points="${histLine(hist, top)}" vector-effect="non-scaling-stroke"/></svg>` : ''}
+    ${hist.length > 1 ? `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="${histLine(hist, top)} 100,100 ${((60 - hist.length) * 100 / 59).toFixed(1)},100"/><polyline points="${histLine(hist, top)}" vector-effect="non-scaling-stroke"/></svg>` : ''}
     <div class="shd"><span>${label}</span>${right}</div><div class="sval">${value}</div><div class="ssub">${sub}</div></div>`
 }
 function drawSystem() {
-  drawSys($('system'), S.system.enabled ? sys : null, {cpu: cpuHist, mem: memHist, gpu: gpuHist}, S.system.threads)
+  drawSys($('system'), S.system.enabled ? sys : null, {cpu: cpuHist, mem: memHist, gpu: gpuHist}, S.system.threads, T.secSystem)
 }
 // the cards + cores + one-line form of `sys` (this machine's or the remote one's) into `el`; hist = their 2 minutes
-function drawSys(el, sys, hist, threadsOn) {
+function drawSys(el, sys, hist, threadsOn, title = '') {
   if (!sys) { if (el.innerHTML) el.innerHTML = ''; return }
   const before = el.offsetHeight
   const cpu = Math.round(sys.cpu)
@@ -310,7 +326,7 @@ function drawSys(el, sys, hist, threadsOn) {
   // the same numbers as one line, for the denser layouts (CSS shows it instead of the cards)
   const item = (label, p, text) => `<span class="si" title="${esc(tip[label.toLowerCase()])}"><b>${label}</b>${bar(p, 70, 90)}<span class="pct">${text}</span></span>`
   const line = `<div class="sysline">${item('CPU', cpu, cpu + '%')}${item('RAM', memP, Math.round(memP) + '%')}${g ? item('GPU', g.load, Math.round(g.load) + '%') : ''}</div>`
-  el.innerHTML = `<div class="scards${g ? '' : ' two'}">${cards}</div>${cores}${line}`
+  el.innerHTML = `${title ? heading(title) : ''}<div class="scards${g ? '' : ' two'}">${cards}</div>${cores}${line}`
   for (const i of el.querySelectorAll('.bar i')) i.style.width = i.dataset.p + '%'
   for (const c of el.querySelectorAll('.scard')) c.style.setProperty('--c', SYS_COLORS[c.dataset.c])
   for (const f of el.querySelectorAll('.sfill, .core i')) f.style.height = f.dataset.h + '%'
@@ -443,7 +459,7 @@ const contentOf = (el) => {
 // what the content needs, measured without the stretch into spare room
 const natural = () => {
   document.body.classList.add('measuring')
-  const h = $('head').offsetHeight + contentOf(editing ? $('settings') : $('view')) + 16
+  const h = $('head').offsetHeight + contentOf(editing ? $('settings') : $('view')) + 2   // + the box's 1 px borders (sections carry their own padding)
   document.body.classList.remove('measuring')
   return h
 }
@@ -727,6 +743,7 @@ async function pollCounter() {
 ;(async () => {
   S = await invoke('settings_get')
   applyLook()
+  applyEffects()
   // the window remembers where you put it
   // the window's place and size live in the settings file (saved at once); a value left in localStorage by an older
   // version is taken over once

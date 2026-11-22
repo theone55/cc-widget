@@ -5,6 +5,8 @@
   --full: #f87171;
   --accent: #a78bfa;
   --alpha: 0.94;
+  --r: 13px;
+  --head: rgba(255, 255, 255, 0.04);
   /* Windows 11 / Fluent: a Mica-like tinted surface (a soft blue glow in the corner over a graphite gradient) */
   --bg: radial-gradient(ellipse at 0 0, rgba(48, 71, 101, calc(var(--alpha) * 0.62)), transparent 65%),
     linear-gradient(160deg, rgba(39, 42, 57, var(--alpha)), rgba(29, 32, 43, var(--alpha)));
@@ -18,6 +20,7 @@
   --idle: #8b8ea0;
 }
 :root.light {
+  --head: rgba(0, 0, 0, 0.03);
   --bg: radial-gradient(ellipse at 0 0, rgba(176, 208, 250, calc(var(--alpha) * 0.55)), transparent 65%),
     linear-gradient(160deg, rgba(246, 248, 252, var(--alpha)), rgba(235, 239, 246, var(--alpha)));
   --border: rgba(0, 0, 0, 0.14);
@@ -33,28 +36,33 @@
 html, body { margin: 0; background: transparent; color: var(--text);
   font: 12px/1.4 "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
   font-variant-numeric: tabular-nums; overflow: hidden; user-select: none; }
-#box { background: var(--bg); border: 1px solid var(--border); border-radius: 13px; box-sizing: border-box; padding: 4px 8px 6px;
+/* a Windows 11 window rounds itself by 8 px (widget.js applyEffects sets .fx) */
+:root.fx { --r: 8px; }
+#box { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); box-sizing: border-box; padding: 0; overflow: hidden;
   height: 100vh; display: flex; flex-direction: column; }
+[hidden] { display: none !important; }
 #view { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 #view > .section { flex: none; }
 
 /* a window taller than its content (your size): the System cards grow into the room; widget.js measures without it */
 #system { display: flex; flex-direction: column; }
 #view > #system { flex: 1 0 auto; }
-#system .scards { flex: 1 0 auto; grid-auto-rows: minmax(70px, 1fr); }
+#system .scards { flex: 1 0 auto; grid-auto-rows: minmax(58px, 1fr); }
 body.measuring #view > #system, body.measuring #system .scards { flex: none; }
 
 /* denser layouts when your height is shorter than everything (widget.js levelFor), cumulative, the gentle ones first
    (owner 2026-10-17: one step squeezing everything at once looked cramped):
    1 shorter System cards → 2 no details → 3 tighter rows and gaps → 4 System as one line → 5 sessions as chips
    → 6 limits as text, two accounts a line → 7 no System, sessions as dots → 8 no limits */
-body.dense1 #system .scards { grid-auto-rows: minmax(46px, 1fr); }
+body.dense1 #system .scards { grid-auto-rows: minmax(44px, 1fr); }
 body.dense1 .scard .ssub { display: none; }
 body.dense2 .details, body.dense2 .resets { display: none !important; }
 body.dense3 .row { min-height: 18px; margin: 1px 0; }
-body.dense3 .section { margin-top: 4px; padding-top: 4px; }
-body.dense3 .lim { height: 18px; }
-body.dense3 .cores { height: 14px; }
+body.dense3 .section { padding-top: 4px; padding-bottom: 4px; }
+body.dense3 .sh { display: none; }
+body.dense3 #head { height: 30px; }
+body.dense3 .lim { min-height: 18px; }
+body.dense3 .cores { height: 10px; }
 body.dense4 .scards, body.dense4 .cores { display: none; }
 body.dense4 .sysline { display: flex; }
 body.dense5 #list { display: flex; flex-wrap: wrap; gap: 3px; }
@@ -63,9 +71,10 @@ body.dense5 .row .name { max-width: 90px; }
 body.dense5 .row .ctxbar { width: auto; }
 body.dense5 .row .ctxbar .bar, body.dense5 .row .letter { display: none; }
 body.dense6 #limits { display: flex; flex-wrap: wrap; column-gap: 10px; }
-body.dense6 .lim { gap: 4px; }
+body.dense6 .lim { display: flex; gap: 4px; }
+body.dense6 .win { display: flex; gap: 3px; padding: 0; flex: none; }
 body.dense6 .lim .bar { display: none; }
-body.dense6 .lim .pct { width: auto; margin-right: 2px; }
+body.dense6 .lim .pct { width: auto; }
 body.dense7 #system, body.dense7 .rsys, body.dense7 .row .rago { display: none; }
 body.dense7 .row { padding: 0 3px; gap: 0; }
 body.dense7 .row .name, body.dense7 .row .ctxbar, body.dense5 .row .prog { display: none; }
@@ -84,11 +93,12 @@ body.dense8 #limits { display: none; }
   .pct, .counter-head, .scard .opt { display: none; }
   /* limits as text there: "5ч 41% 7д 76%" fits and says more than two unlabeled bars */
   .lim .bar { display: none; }
-  .lim .pct, .sysline .pct { display: inline; width: auto; margin-right: 2px; }
-  .lim { gap: 4px; }
+  .lim .pct, .sysline .pct { display: inline; width: auto; }
+  .lim { display: flex; gap: 4px; }
+  .win { display: flex; gap: 3px; padding: 0; flex: none; }
   .tag { width: auto; max-width: 52px; }
   .row .ctxbar { width: 40px; }
-  .resets { margin-left: 0; }
+  .resets { margin-left: 0 !important; }
 }
 @media (max-width: 230px) {
   .letter { display: none; }
@@ -97,7 +107,7 @@ body.dense8 #limits { display: none; }
 #box.waiting { border-color: var(--warn); }
 
 /* the header drags the window; a click (not a drag) toggles the details */
-#head { display: flex; align-items: center; gap: 8px; height: 22px; cursor: pointer; }
+#head { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; box-sizing: border-box; background: var(--head); cursor: pointer; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
 .dot.busy { background: var(--ok); animation: pulse 1.6s steps(2, jump-none) infinite; }
 .dot.wait { background: var(--warn); }
@@ -109,10 +119,10 @@ body.dense8 #limits { display: none; }
 .bgmark.busy { color: var(--ok); }
 .bgmark.wait { color: var(--warn); }
 .bgmark.blocked { color: var(--full) !important; }
-.chip { flex: none; font-size: 9px; line-height: 13px; padding: 0 4px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); }
+.chip { flex: none; font-size: 9px; line-height: 13px; padding: 0 3px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); text-align: center; white-space: nowrap; }
 .chip.blocked { color: var(--full); border-color: var(--full); }
 #box.blocked { border-color: var(--full); }
-.row.blocked .name { color: var(--full); font-weight: 600; }
+.row.blocked .name { color: var(--full); font-weight: 650; }
 .row.blocked { background: color-mix(in srgb, var(--full) 14%, transparent); }
 /* two steps, not a smooth fade: a transparent window is repainted whole on every animation frame, and a smooth
    pulse cost a fifth of a CPU core on Windows */
@@ -121,7 +131,8 @@ body.dense8 #limits { display: none; }
 .muted { color: var(--muted); }
 .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .counter-head { color: var(--muted); white-space: nowrap; }
-.gear { border: none; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1; }
+.counter-head { font-size: 11px; }
+.gear { border: none; background: none; color: var(--muted); cursor: pointer; padding: 0; width: 22px; text-align: center; font-size: 15px; line-height: 1; }
 .gear:hover { color: var(--text); }
 
 /* a filled bar: the track is always visible, the fill is the used part (its width is set from JS: the CSP drops style="") */
@@ -130,17 +141,27 @@ body.dense8 #limits { display: none; }
 .bar i.hot { background: var(--warn); }
 .bar i.full { background: var(--full); }
 .pct { width: 30px; text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+.pct.hot { color: var(--warn); }
+.pct.full { color: var(--full); }
 
-.section { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 5px; }
+/* a Fluent section: full-width separator, a title, its own padding */
+.section { border-top: 1px solid var(--line); padding: 7px 12px; }
+.sh { margin: 0 0 4px; font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--text); }
 .section:empty { display: none !important; }
 /* a limit line is taller than its tag (14 px + border), so two accounts never touch */
-.lim { display: flex; align-items: center; gap: 6px; height: 21px; }
-.lim .lbl { width: 16px; flex: none; color: var(--muted); }
+/* label | 5h window | 7d window | plan: each window is "5h ... 25%" with a thin bar under it */
+.lim { display: grid; grid-template-columns: 59px minmax(0, 1fr) minmax(0, 1fr) auto; gap: 5px; align-items: center; min-height: 21px; font-size: 11px; }
+.win { position: relative; display: grid; grid-template-columns: 1fr auto; padding-bottom: 5px; min-width: 0; }
+.win .lbl { color: var(--muted); }
+.win .pct { width: 31px; }
+.win .bar { position: absolute; left: 0; right: 0; bottom: 2px; height: 2px; min-width: 0; }
+.lim > .chip { grid-column: 4; grid-row: 1; }
+.lim > .chip.blocked + .chip.plan { display: none; }
 /* a Fluent tag: a tint of its own colour (the account colour is set inline as color + border-color), no outline */
-.tag { font-size: 10px; line-height: 14px; padding: 0 5px; border-radius: 4px; border: 1px solid transparent; color: var(--muted);
+.tag { font-size: 11px; line-height: 16px; padding: 0 5px; border-radius: 4px; border: 1px solid transparent; color: var(--muted);
   background: color-mix(in srgb, currentColor 14%, transparent);
-  flex: none; width: 52px; text-align: center; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.resets { color: var(--muted); font-size: 10px; margin: 0 0 3px 58px; }
+  flex: none; width: 59px; text-align: center; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.resets { color: var(--muted); font-size: 10px; margin: 0 0 3px 64px; }
 /* a GPT (Codex) account: a dashed tag with a ⬡ mark tells it from a Claude one; its windows are labelled by length
    ("5h", "7d", "30d"), so the label may be wider; the plan chip closes the line */
 .tag.gpt { border-style: dashed; }
@@ -153,67 +174,65 @@ body.dense8 #limits { display: none; }
   /* the account color is inline (beats any color rule here), so darken the whole tag instead */
   filter: brightness(0.72); }
 :root.light .tag.gemini:not(.off) { color: #0a7fb3; border-color: #0a7fb3; }
-.lim.gpt .lbl { width: auto; min-width: 16px; }
-.lim .gerr { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lim .gerr { grid-column: 2 / 4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip.plan { text-transform: uppercase; letter-spacing: 0.04em; }
-body.dense6 .lim .chip.plan { display: none; }
+body.dense6 .lim .chip.plan, body.dense6 .lim .chip.blocked { display: none; }
 @media (max-width: 260px) { .lim .chip.plan { display: none; } }
 
 /* the System section: three cards (CPU, RAM, GPU) — a fill from the bottom = the load now, a line = the last 2 minutes;
    under them a column per core made of its threads, each with a glowing cap */
-.scards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.scards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
 .scards.two { grid-template-columns: repeat(2, 1fr); }
-.scard { --c: var(--accent); position: relative; min-height: 0; border-radius: 6px; overflow: hidden; background: var(--hover);
-  box-shadow: inset 0 0 0 1px var(--line); }
-.scard .sfill { position: absolute; left: 0; right: 0; bottom: 0; height: 3%;
-  background: linear-gradient(to top, color-mix(in srgb, var(--c) 34%, transparent), color-mix(in srgb, var(--c) 8%, transparent)); }
-.scard svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.scard polyline { fill: none; stroke: var(--c); stroke-width: 1.6; stroke-linejoin: round; }
-.scard .shd { position: absolute; top: 4px; left: 6px; right: 5px; display: flex; justify-content: space-between; align-items: center;
-  font-size: 9px; color: var(--muted); letter-spacing: 0.06em; font-weight: 700; white-space: nowrap; }
-.scard .sval { position: absolute; top: 16px; left: 6px; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.35); }
-.scard .sval small { font-size: 10px; font-weight: 500; color: var(--muted); }
-.scard .ssub { position: absolute; bottom: 4px; left: 6px; right: 5px; font-size: 9px; color: var(--text); opacity: 0.75;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 4px rgba(0, 0, 0, 0.8); }
-:root.light .scard .sval, :root.light .scard .ssub { text-shadow: 0 0 4px rgba(255, 255, 255, 0.9); }
+/* a metric: caption, number, then the last 2 minutes as a line over a soft area (the grid cells are separated by a line) */
+.scard { --c: var(--accent); position: relative; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.scard + .scard { border-left: 1px solid var(--line); padding-left: 7px; }
+.scard .sfill, .scard .ssub { display: none; }
+.scard .shd { display: flex; justify-content: space-between; align-items: center; gap: 3px; font-size: 9px; line-height: 12px;
+  color: var(--muted); white-space: nowrap; }
+.scard .sval { font-size: 18px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.scard .sval small { font-size: 10px; font-weight: 400; color: var(--muted); }
+.scard .shd { order: 1; } .scard .sval { order: 2; }
+.scard svg { order: 3; flex: 1 1 0; height: 0; min-height: 8px; width: 100%; margin-top: 3px; display: block;
+  background: repeating-linear-gradient(to top, var(--line) 0 1px, transparent 1px 50%); }
+.scard polyline { fill: none; stroke: var(--c); stroke-width: 1.4; stroke-linejoin: round; }
+.scard polygon { fill: color-mix(in srgb, var(--c) 28%, transparent); stroke: none; }
 .temp { flex: none; font-size: 9px; font-weight: 700; padding: 0 4px; border-radius: 7px; line-height: 13px; letter-spacing: 0;
   font-variant-numeric: tabular-nums; color: var(--ok); background: color-mix(in srgb, var(--ok) 18%, transparent); }
 .temp.hot { color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, transparent); }
 .temp.full { color: var(--full); background: color-mix(in srgb, var(--full) 20%, transparent); }
-.cores { display: grid; gap: 3px; margin: 5px 0 2px; height: 22px; }
+.cores { display: grid; gap: 3px; margin: 4px 0 0; height: 12px; }
 /* flat Fluent columns: one solid colour per load level, no glow */
-.core { display: flex; gap: 1px; align-items: flex-end; padding: 1px; border-radius: 3px; background: var(--track); }
-.core i { flex: 1; height: 5%; border-radius: 1.5px 1.5px 0 0; background: var(--ok); opacity: 0.8; }
+.core { display: flex; gap: 1px; align-items: flex-end; background: var(--track); }
+.core i { flex: 1; height: 5%; background: var(--ok); opacity: 0.72; }
 .core i.hot { background: var(--warn); }
 .core i.full { background: var(--full); }
 
 /* the other machine: its own group under this one's */
-#remote:not(:empty) { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
-.rhead { display: flex; align-items: center; gap: 6px; height: 20px; }
+.rhead { display: flex; align-items: center; gap: 6px; min-height: 20px; margin-bottom: 4px; }
+#rtag { width: auto; min-width: 27px; padding: 0 6px; font-size: 13px; font-weight: 600; }
 .rhead .rerr { color: var(--full); font-weight: 700; cursor: help; }
 .row .rago { font-size: 10px; flex: none; }
 .rsys:not(:empty) { margin-top: 4px; }
 .rsys .scards { grid-auto-rows: minmax(54px, 1fr); }
 body.dense1 .rsys .scards { grid-auto-rows: minmax(40px, 1fr); }
-.row { display: flex; align-items: center; gap: 6px; min-height: 20px; border-radius: 5px; cursor: pointer; padding: 0 2px; }
+.row { display: flex; align-items: center; gap: 6px; min-height: 20px; cursor: pointer; padding: 0; border-top: 1px solid var(--line); }
+.sh + .row, .rhead + .row { border-top: 0; }
 .row:hover { background: var(--hover); }
-.row.acc { background: color-mix(in srgb, var(--acc) 11%, transparent); margin: 2px 0; padding: 0 5px; }
-.row.acc:hover { background: color-mix(in srgb, var(--acc) 20%, transparent); }
 .row .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row.wait .name { color: var(--warn); font-weight: 600; }
+.row.wait .name { font-weight: 650; }
 .row .prog { flex: none; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sub.task { margin-top: -3px; }
-.row .ctxbar { width: 64px; flex: none; display: flex; align-items: center; gap: 4px; }
-.letter { font-size: 10px; flex: none; min-width: 12px; text-align: center; color: var(--muted); }
-.sub { color: var(--muted); font-size: 10px; margin: -2px 0 3px 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .ctxbar { width: 62px; flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.row .ctxbar .pct { width: 24px; }
+.letter { font-size: 10px; flex: none; padding: 0 4px; border-radius: 3px; text-align: center; color: var(--muted); background: var(--hover); }
+.sub { color: var(--muted); font-size: 10px; margin: -1px 0 3px 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .empty { color: var(--muted); padding: 2px; }
 .details { display: none; }
 body.open .details { display: block; }
 body.open .sub.details { display: block; }
 
 /* settings */
-#settings { flex: 1; min-height: 0; overflow-y: auto; padding-right: 2px; }
+#settings { flex: 1; min-height: 0; overflow-y: auto; }
 #settings input[type=checkbox], #settings input[type=range] { accent-color: var(--accent); }
 #settings h4 { margin: 10px 0 4px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--text); }
 #settings h4:first-child { border-top: 0; padding-top: 0; margin-top: 4px; }
@@ -237,14 +256,14 @@ body.open .sub.details { display: block; }
 #settings button.primary { background: var(--accent); border-color: var(--accent); color: #0b1220; font-weight: 600; }
 #settings button.primary:hover { filter: brightness(1.08); }
 #settings .hint { color: var(--muted); font-size: 10px; margin: 1px 0 4px; }
-#settings .actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; position: sticky; bottom: 0;
+#settings .actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; margin-bottom: 4px; position: sticky; bottom: 0;
   background: linear-gradient(to bottom, transparent, rgba(29, 32, 43, 0.92) 30%); padding: 6px 0 2px; }
 :root.light #settings .actions { background: linear-gradient(to bottom, transparent, rgba(238, 241, 247, 0.95) 30%); }
 #settings .st-connected { color: var(--ok); }
 #settings .st-other { color: var(--muted); }
 ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: var(--muted); opacity: 0.5; border-radius: 3px; }
 /* a background session started by the row above it (its parent) */
-.row.child { margin-left: 12px; }
+.row.child { padding-left: 12px; }
 /* a subagent (Agent tool) under its session: violet, indented, a ◆ instead of ↳ — never confused with a delegate */
 :root { --sa: #9b6bff; }
 .sarow { margin-left: 14px; min-height: 17px; border-left: 2px solid var(--sa); border-radius: 0 5px 5px 0; padding-left: 6px; font-size: 11px; }

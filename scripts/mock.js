@@ -2,7 +2,7 @@
 ;(() => {
   const q = new URLSearchParams(location.search)
   // a height cap for the dense layouts' screenshots
-  try { if (q.get('level')) localStorage.setItem('size', JSON.stringify({w: 300, level: Number(q.get('level'))})); else localStorage.removeItem('size') } catch (e) {}
+  try { if (q.get('level')) localStorage.setItem('size', JSON.stringify({w: 300, h: 200, level: Number(q.get('level'))})); else localStorage.removeItem('size') } catch (e) {}
   const now = Date.now()
   const settings = {
     theme: q.get('theme') || 'dark', language: q.get('lang') || 'en', opacity: 96,
@@ -87,11 +87,25 @@
     remote_host: () => ({cpu: 23, threads: [30, 12, 41, 8, 25, 19, 60, 5], cores: [21, 25, 22, 33], perCore: 2,
       memUsed: 21.4 * 2 ** 30, memTotal: 32 * 2 ** 30, cpuTemp: null, gpu: {name: 'NVIDIA GeForce RTX 3060', load: 4, memUsed: 1.1 * 2 ** 30, memTotal: 12 * 2 ** 30, temp: 41}}),
     remote_waiting: () => [{sessionId: 'c', reason: 'Claude needs your permission to use Bash'}],
-    remote_runs: () => [
+    remote_runs: () => ({chat: null, runs: [
       {id: 161, name: 'Morning digest', status: 'busy', startedAt: new Date(now - 2 * 60000).toISOString(), origin: 'SCHEDULE'},
       {id: 160, name: '[order #92] widget: remote sessions', status: 'done', startedAt: new Date(now - 40 * 60000).toISOString(), finishedAt: new Date(now - 12 * 60000).toISOString(), origin: 'ORDER'},
       {id: 159, name: 'release-followup v2.9.0', status: 'error', startedAt: new Date(now - 160 * 60000).toISOString(), finishedAt: new Date(now - 159 * 60000).toISOString(), origin: 'ORDER'},
-    ],
+    ]}),
+    // this PC's load (?sys=1): a wobbling number each call, so the 2-minute lines have a history
+    system_stats: () => {
+      const t = (answers._n = (answers._n || 0) + 1)
+      const w = (a, b, k) => Math.max(2, Math.min(98, a + b * Math.sin(t / k)))
+      const threads = Array.from({length: 24}, (_, i) => w(78 - i * 3, 14, 2 + i % 3))
+      return {cpu: w(60, 25, 2.5), threads, cores: Array.from({length: 12}, (_, i) => (threads[2 * i] + threads[2 * i + 1]) / 2), perCore: 2,
+        memUsed: 40 * 2 ** 30, memTotal: 48 * 2 ** 30, cpuTemp: null, gpu: {name: 'NVIDIA GeForce RTX 4070', load: w(12, 8, 3), memUsed: 3 * 2 ** 30, memTotal: 12 * 2 ** 30, temp: 50}}
+    },
+  }
+  if (q.get('sys') === '1') {
+    settings.system.enabled = true
+    // poll fast so a short screenshot run collects a history
+    const st = window.setTimeout
+    window.setTimeout = (f, d, ...a) => st(f, d === 2000 ? 40 : d, ...a)
   }
   window.__TAURI__ = {
     core: {invoke: async (cmd, args) => { if (!(cmd in answers)) throw 'no ' + cmd; return answers[cmd](args || {}) }},

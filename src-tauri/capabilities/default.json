@@ -13,6 +13,7 @@
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
-    "core:window:allow-scale-factor"
+    "core:window:allow-scale-factor",
+    "core:window:allow-set-effects"
   ]
 }
