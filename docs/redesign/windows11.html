@@ -1,0 +1,154 @@
+<!doctype html>
+<!-- Use a Mica-like tinted surface, Segoe UI Variable and thin Fluent progress indicators with subtle separators. -->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Windows 11 / Fluent · cc-widget</title>
+<style>
+* { box-sizing: border-box; }
+html { color-scheme: dark; }
+body { margin: 0; }
+.widget { width: min(350px, 100%); font-variant-numeric: tabular-nums; }
+h1, h2, p, ul, figure { margin: 0; }
+ul { padding: 0; list-style: none; }
+header, .section-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.counter, .muted, .period, .when, figcaption { color: var(--muted); }
+.counter { margin-left: auto; white-space: nowrap; }
+.gear { color: var(--muted); font-size: 15px; }
+.limit { display: grid; grid-template-columns: 59px minmax(0, 1fr) minmax(0, 1fr) 30px; gap: 5px; align-items: center; }
+.window { display: grid; grid-template-columns: auto minmax(0, 1fr) 31px; gap: 4px; align-items: center; }
+.number { text-align: right; }
+.tag { color: var(--tag); border: 1px solid currentColor; text-align: center; white-space: nowrap; }
+.badge { border: 1px solid var(--line); color: var(--muted); padding: 0 3px; font-size: 9px; text-align: center; white-space: nowrap; }
+.bar { display: block; width: 100%; min-width: 0; height: 4px; overflow: hidden; background: var(--track); border-radius: 3px; }
+.bar i { display: block; height: 100%; width: var(--p); background: var(--fill, var(--accent)); border-radius: inherit; }
+.hot { --fill: var(--danger); color: var(--danger); }
+.session, .job { display: flex; align-items: center; gap: 6px; }
+.name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mark { display: inline-grid; place-items: center; width: 11px; flex: none; font-size: 10px; color: var(--good); }
+.wait .mark, .status .mark { color: var(--warn); }
+.job .mark { color: var(--muted); }
+.child { padding-left: 12px; }
+.account { color: var(--account, var(--muted)); font-size: 10px; }
+.context, .tasks { display: inline-flex; align-items: center; gap: 4px; width: 62px; flex: none; justify-content: end; }
+.context .number { min-width: 24px; }
+.tasks { width: 73px; color: var(--muted); font-size: 9px; white-space: nowrap; }
+.metrics { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 5px; }
+.metric { position: relative; min-width: 0; }
+figcaption { display: flex; justify-content: space-between; gap: 3px; white-space: nowrap; font-size: 9px; }
+.value { font-size: 17px; line-height: 1.2; }
+.value small { font-size: 10px; font-weight: normal; color: var(--muted); }
+.plot { height: var(--plot-height, 24px); margin-top: 3px; color: var(--metric, var(--accent)); position: relative;
+  background: repeating-linear-gradient(to top, var(--line) 0 1px, transparent 1px 50%); }
+.plot::before { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, transparent, currentColor); opacity: .35; clip-path: polygon(var(--area)); }
+.plot::after { content: ""; position: absolute; inset: 0; background: currentColor; clip-path: polygon(var(--trace)); }
+.cores { height: 12px; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 3px; margin-top: 4px; }
+.core { display: flex; align-items: end; gap: 1px; background: var(--track); }
+.core i { flex: 1; height: var(--h); background: var(--core, var(--accent)); opacity: .72; }
+.when { font-size: 10px; white-space: nowrap; }
+
+body { font: 12px/1.4 "Segoe UI Variable", "Segoe UI", sans-serif; color: #f6f5f9; }
+.widget { --muted: #c3c6d5; --line: #ffffff17; --track: #b9bbcd3b; --accent: #9ccaff;
+  --good: #81e1ab; --warn: #ffc68a; --danger: #ffa6a5; --metric: #a9ceff;
+  border: 1px solid #ffffff2e; border-radius: 13px; overflow: hidden;
+  background: radial-gradient(ellipse at 0 0, #3047659c, transparent 65%), linear-gradient(160deg, #272a39ef, #1d202bf5);
+  box-shadow: 0 8px 24px #0005; backdrop-filter: blur(28px); }
+header { min-height: 40px; padding: 0 12px; background: #ffffff0a; }
+header .counter { font-size: 11px; }
+.status { white-space: nowrap; }
+.gear { width: 22px; text-align: center; }
+section { padding: 7px 12px; border-top: 1px solid var(--line); }
+h2 { font-size: 13px; font-weight: 600; }
+.section-head { justify-content: start; margin-bottom: 4px; }
+.limit { min-height: 21px; font-size: 11px; }
+.tag { background: color-mix(in srgb, var(--tag) 14%, transparent); border: 0; border-radius: 4px; line-height: 16px; }
+.badge { border-radius: 4px; }
+.window { position: relative; grid-template-columns: 1fr auto; padding: 0 0 5px; gap: 0; }
+.window .bar { position: absolute; bottom: 2px; height: 2px; }
+.session { min-height: 20px; }
+.session + .session { border-top: 1px solid var(--line); }
+.session.wait .name { font-weight: 650; }
+.account { background: #ffffff0d; border-radius: 3px; padding: 0 4px; }
+.metrics { gap: 9px; --plot-height: 17px; }
+.metric { padding: 2px 0 0; --metric: #9ccaff !important; }
+.metric + .metric { border-left: 1px solid var(--line); padding-left: 7px; }
+.value { font-size: 18px; font-weight: 600; }
+.core i { background: var(--accent); }
+.server { min-width: 27px; }
+.job { min-height: 18px; }
+.jobs { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<main class="widget" aria-label="cc-widget">
+<header><span class="status"><span class="mark" aria-hidden="true">●</span> <strong>3 ждут</strong> <span class="muted">·</span> 4 в работе</span><span class="counter">калк 46 / 388 / 1724</span><span class="gear" role="img" aria-label="Настройки">⚙</span></header>
+<section aria-label="Лимиты">
+<div class="section-head"><h2>Лимиты</h2></div>
+<ul>
+  <li class="limit"><span class="tag" style="--tag: #8ab9ff">работа</span><span class="window"><span class="period">5ч</span><span class="bar" aria-hidden="true" style="--p: 25%"><i></i></span><span class="number">25%</span></span><span class="window"><span class="period">7д</span><span class="bar" aria-hidden="true" style="--p: 41%"><i></i></span><span class="number">41%</span></span></li>
+  <li class="limit"><span class="tag" style="--tag: #ed8ae7">личный</span><span class="window hot"><span class="period">5ч</span><span class="bar" aria-hidden="true" style="--p: 100%"><i></i></span><span class="number">100%</span></span><span class="window"><span class="period">7д</span><span class="bar" aria-hidden="true" style="--p: 24%"><i></i></span><span class="number">24%</span></span></li>
+  <li class="limit"><span class="tag" style="--tag: #6ee9b1">свой</span><span class="window hot"><span class="period">5ч</span><span class="bar" aria-hidden="true" style="--p: 98%"><i></i></span><span class="number">98%</span></span><span class="window"><span class="period">7д</span><span class="bar" aria-hidden="true" style="--p: 50%"><i></i></span><span class="number">50%</span></span></li>
+  <li class="limit"><span class="tag" style="--tag: #62ddce">GPT Plus</span><span class="window"><span class="period">5ч</span><span class="bar" aria-hidden="true" style="--p: 22%"><i></i></span><span class="number">22%</span></span><span class="window"><span class="period">7д</span><span class="bar" aria-hidden="true" style="--p: 39%"><i></i></span><span class="number">39%</span></span><span class="badge">PLUS</span></li>
+  <li class="limit"><span class="tag" style="--tag: #f3cf60">GPT Free</span><span class="window"><span class="period">30д</span><span class="bar" aria-hidden="true" style="--p: 9%"><i></i></span><span class="number">9%</span></span><span></span><span class="badge">FREE</span></li>
+  <li class="limit"><span class="tag" style="--tag: #64cfff">gemini</span><span class="window"><span class="period">Gemini</span><span class="bar" aria-hidden="true" style="--p: 0%"><i></i></span><span class="number">0%</span></span><span class="window"><span class="period">3р</span><span class="bar" aria-hidden="true" style="--p: 52%"><i></i></span><span class="number">52%</span></span></li>
+</ul>
+</section>
+<section aria-label="Сессии">
+<div class="section-head"><h2>Сессии</h2></div>
+<ul>
+  <li class="session wait"><span class="mark" role="img" aria-label="Ждёт">●</span><span class="name">cc-widget-c3</span><span class="account">P</span><span class="context" aria-label="Контекст"><span class="muted">—</span></span></li>
+  <li class="session busy"><span class="mark" role="img" aria-label="В работе">●</span><span class="name">agora-77</span><span class="tasks"><span class="bar" role="meter" aria-label="Прогресс задач" aria-valuemin="0" aria-valuemax="100" aria-valuenow="29" style="--p: 29%"><i></i></span><span>1/4 · 29%</span></span><span class="account">P</span><span class="context" aria-label="Контекст"><span class="bar" aria-hidden="true" style="--p: 9%"><i></i></span><span class="number">9%</span></span></li>
+  <li class="session child"><span class="mark" role="img" aria-label="Фоновая сессия">↳</span><span class="name">self-rig-obkx</span><span class="badge">фон</span><span class="account">P</span><span class="context" aria-label="Контекст"><span class="bar" aria-hidden="true" style="--p: 7%"><i></i></span><span class="number">7%</span></span></li>
+  <li class="session child"><span class="mark" role="img" aria-label="Фоновая сессия">↳</span><span class="name">delta-feed-nvx5</span><span class="badge">фон</span><span class="account">P</span><span class="context" aria-label="Контекст"><span class="bar" aria-hidden="true" style="--p: 7%"><i></i></span><span class="number">7%</span></span></li>
+  <li class="session busy"><span class="mark" role="img" aria-label="В работе">●</span><span class="name">jfsecure-android-39</span><span class="account">P</span><span class="context" aria-label="Контекст"><span class="bar" aria-hidden="true" style="--p: 16%"><i></i></span><span class="number">16%</span></span></li>
+  <li class="session wait"><span class="mark" role="img" aria-label="Ждёт">●</span><span class="name">statics-be-46</span><span class="account">P</span><span class="context" aria-label="Контекст"><span class="muted">—</span></span></li>
+  <li class="session wait"><span class="mark" role="img" aria-label="Ждёт">●</span><span class="name">hub-3e</span><span class="account">P</span><span class="context" aria-label="Контекст"><span class="muted">—</span></span></li>
+</ul>
+</section>
+<section class="machine" aria-label="Этот ПК">
+<div class="section-head"><h2>Этот ПК</h2></div>
+<div class="metrics">
+  <figure class="metric" style="--metric: #b296ff">
+    <figcaption><span>CPU</span><span>12 ядер</span></figcaption>
+    <strong class="value">73%</strong>
+    <div class="plot" aria-hidden="true" style="--area: 0% 81%, 5% 31%, 10% 80%, 15% 85%, 20% 61%, 25% 53%, 30% 70%, 35% 69%, 40% 46%, 45% 54%, 50% 45%, 55% 42%, 60% 30%, 65% 39%, 70% 34%, 75% 14%, 80% 29%, 85% 6%, 90% 36%, 95% 8%, 100% 27%, 100% 100%, 0 100%; --trace: 0% 81%, 5% 31%, 10% 80%, 15% 85%, 20% 61%, 25% 53%, 30% 70%, 35% 69%, 40% 46%, 45% 54%, 50% 45%, 55% 42%, 60% 30%, 65% 39%, 70% 34%, 75% 14%, 80% 29%, 85% 6%, 90% 36%, 95% 8%, 100% 27%, 100% 33%, 95% 14%, 90% 42%, 85% 12%, 80% 35%, 75% 20%, 70% 40%, 65% 45%, 60% 36%, 55% 48%, 50% 51%, 45% 60%, 40% 52%, 35% 75%, 30% 76%, 25% 59%, 20% 67%, 15% 91%, 10% 86%, 5% 37%, 0% 87%"></div>
+  </figure>
+  <figure class="metric" style="--metric: #ffc584">
+    <figcaption><span>RAM</span><span>48 ГБ</span></figcaption>
+    <strong class="value">40 <small>ГБ</small></strong>
+    <div class="plot" aria-hidden="true" style="--area: 0% 19%, 5% 19%, 10% 22%, 15% 21%, 20% 19%, 25% 20%, 30% 21%, 35% 20%, 40% 20%, 45% 20%, 50% 19%, 55% 19%, 60% 20%, 65% 19%, 70% 19%, 75% 18%, 80% 18%, 85% 17%, 90% 17%, 95% 18%, 100% 17%, 100% 100%, 0 100%; --trace: 0% 19%, 5% 19%, 10% 22%, 15% 21%, 20% 19%, 25% 20%, 30% 21%, 35% 20%, 40% 20%, 45% 20%, 50% 19%, 55% 19%, 60% 20%, 65% 19%, 70% 19%, 75% 18%, 80% 18%, 85% 17%, 90% 17%, 95% 18%, 100% 17%, 100% 23%, 95% 24%, 90% 23%, 85% 23%, 80% 24%, 75% 24%, 70% 25%, 65% 25%, 60% 26%, 55% 25%, 50% 25%, 45% 26%, 40% 26%, 35% 26%, 30% 27%, 25% 26%, 20% 25%, 15% 27%, 10% 28%, 5% 25%, 0% 25%"></div>
+  </figure>
+  <figure class="metric" style="--metric: #62eb9a">
+    <figcaption><span>GPU</span><span>50°</span></figcaption>
+    <strong class="value">9%</strong>
+    <div class="plot" aria-hidden="true" style="--area: 0% 86%, 5% 83%, 10% 98%, 15% 96%, 20% 90%, 25% 96%, 30% 91%, 35% 97%, 40% 98%, 45% 94%, 50% 96%, 55% 91%, 60% 94%, 65% 80%, 70% 86%, 75% 83%, 80% 90%, 85% 87%, 90% 96%, 95% 88%, 100% 91%, 100% 100%, 0 100%; --trace: 0% 86%, 5% 83%, 10% 98%, 15% 96%, 20% 90%, 25% 96%, 30% 91%, 35% 97%, 40% 98%, 45% 94%, 50% 96%, 55% 91%, 60% 94%, 65% 80%, 70% 86%, 75% 83%, 80% 90%, 85% 87%, 90% 96%, 95% 88%, 100% 91%, 100% 97%, 95% 94%, 90% 102%, 85% 93%, 80% 96%, 75% 89%, 70% 92%, 65% 86%, 60% 100%, 55% 97%, 50% 102%, 45% 100%, 40% 104%, 35% 103%, 30% 97%, 25% 102%, 20% 96%, 15% 102%, 10% 104%, 5% 89%, 0% 92%"></div>
+  </figure>
+</div>
+<div class="cores" role="img" aria-label="Нагрузка по ядрам" style="--n: 12"><span class="core"><i style="--h: 91%; --core: #ffc584"></i><i style="--h: 74%; --core: #b296ff"></i></span><span class="core"><i style="--h: 92%; --core: #ffc584"></i><i style="--h: 69%; --core: #b296ff"></i></span><span class="core"><i style="--h: 86%; --core: #ffc584"></i><i style="--h: 76%; --core: #b296ff"></i></span><span class="core"><i style="--h: 96%; --core: #ffc584"></i><i style="--h: 72%; --core: #b296ff"></i></span><span class="core"><i style="--h: 90%; --core: #ffc584"></i><i style="--h: 82%; --core: #b296ff"></i></span><span class="core"><i style="--h: 87%; --core: #ffc584"></i><i style="--h: 64%; --core: #62eb9a"></i></span><span class="core"><i style="--h: 86%; --core: #ffc584"></i><i style="--h: 77%; --core: #b296ff"></i></span><span class="core"><i style="--h: 83%; --core: #b296ff"></i><i style="--h: 67%; --core: #b296ff"></i></span><span class="core"><i style="--h: 70%; --core: #b296ff"></i><i style="--h: 60%; --core: #62eb9a"></i></span><span class="core"><i style="--h: 67%; --core: #b296ff"></i><i style="--h: 52%; --core: #62eb9a"></i></span><span class="core"><i style="--h: 54%; --core: #62eb9a"></i><i style="--h: 42%; --core: #62eb9a"></i></span><span class="core"><i style="--h: 61%; --core: #62eb9a"></i><i style="--h: 55%; --core: #62eb9a"></i></span></div>
+</section>
+<section class="remote" aria-label="Сервер 119">
+<div class="section-head"><h2 class="tag server" style="--tag: #f3cf60">119</h2><span class="muted">ничего не запущено</span></div>
+<ul class="jobs">
+  <li class="job"><span class="mark" aria-hidden="true">●</span><span class="name" title="Яндекс переобход калькулятора">Яндекс переобход калькулятора</span><span class="when">расписание · 3 ч 45 мин</span></li>
+  <li class="job"><span class="mark" aria-hidden="true">●</span><span class="name" title="Внешние блокеры">Внешние блокеры</span><span class="when">расписание · 3 ч 45 мин</span></li>
+  <li class="job"><span class="mark" aria-hidden="true">●</span><span class="name" title="Утренняя сводка">Утренняя сводка</span><span class="when">расписание · 4 ч 44 мин</span></li>
+  <li class="job"><span class="mark" aria-hidden="true">●</span><span class="name" title="idea-agent-tools: следить за соавт…">idea-agent-tools: следить за соавт…</span><span class="when">расписание · 17 ч 45 мин</span></li>
+</ul>
+<div class="metrics">
+  <figure class="metric" style="--metric: #b296ff">
+    <figcaption><span>CPU</span><span>6 ядер</span></figcaption>
+    <strong class="value">22%</strong>
+    <div class="plot" aria-hidden="true" style="--area: 0% 89%, 5% 90%, 10% 88%, 15% 91%, 20% 84%, 25% 88%, 30% 81%, 35% 90%, 40% 87%, 45% 92%, 50% 85%, 55% 90%, 60% 88%, 65% 79%, 70% 89%, 75% 64%, 80% 77%, 85% 90%, 90% 73%, 95% 87%, 100% 78%, 100% 100%, 0 100%; --trace: 0% 89%, 5% 90%, 10% 88%, 15% 91%, 20% 84%, 25% 88%, 30% 81%, 35% 90%, 40% 87%, 45% 92%, 50% 85%, 55% 90%, 60% 88%, 65% 79%, 70% 89%, 75% 64%, 80% 77%, 85% 90%, 90% 73%, 95% 87%, 100% 78%, 100% 84%, 95% 93%, 90% 79%, 85% 96%, 80% 83%, 75% 70%, 70% 95%, 65% 85%, 60% 94%, 55% 96%, 50% 91%, 45% 98%, 40% 93%, 35% 96%, 30% 87%, 25% 94%, 20% 90%, 15% 97%, 10% 94%, 5% 96%, 0% 95%"></div>
+  </figure>
+  <figure class="metric" style="--metric: #ffc584">
+    <figcaption><span>RAM</span><span>32 ГБ</span></figcaption>
+    <strong class="value">27 <small>ГБ</small></strong>
+    <div class="plot" aria-hidden="true" style="--area: 0% 18%, 5% 18%, 10% 18%, 15% 18%, 20% 18%, 25% 18%, 30% 17%, 35% 17%, 40% 17%, 45% 17%, 50% 17%, 55% 17%, 60% 16%, 65% 16%, 70% 16%, 75% 16%, 80% 16%, 85% 16%, 90% 16%, 95% 16%, 100% 16%, 100% 100%, 0 100%; --trace: 0% 18%, 5% 18%, 10% 18%, 15% 18%, 20% 18%, 25% 18%, 30% 17%, 35% 17%, 40% 17%, 45% 17%, 50% 17%, 55% 17%, 60% 16%, 65% 16%, 70% 16%, 75% 16%, 80% 16%, 85% 16%, 90% 16%, 95% 16%, 100% 16%, 100% 22%, 95% 22%, 90% 22%, 85% 22%, 80% 22%, 75% 22%, 70% 22%, 65% 22%, 60% 22%, 55% 23%, 50% 23%, 45% 23%, 40% 23%, 35% 23%, 30% 23%, 25% 24%, 20% 24%, 15% 24%, 10% 24%, 5% 24%, 0% 24%"></div>
+  </figure>
+</div>
+<div class="cores" role="img" aria-label="Нагрузка по ядрам" style="--n: 6"><span class="core"><i style="--h: 17%; --core: #62eb9a"></i><i style="--h: 14%; --core: #62eb9a"></i></span><span class="core"><i style="--h: 23%; --core: #62eb9a"></i><i style="--h: 21%; --core: #62eb9a"></i></span><span class="core"><i style="--h: 30%; --core: #62eb9a"></i><i style="--h: 24%; --core: #62eb9a"></i></span><span class="core"><i style="--h: 24%; --core: #62eb9a"></i><i style="--h: 19%; --core: #62eb9a"></i></span><span class="core"><i style="--h: 16%; --core: #62eb9a"></i><i style="--h: 16%; --core: #62eb9a"></i></span><span class="core"><i style="--h: 22%; --core: #62eb9a"></i><i style="--h: 26%; --core: #62eb9a"></i></span></div>
+</section>
+</main>
+</body>
+</html>
