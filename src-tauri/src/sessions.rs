@@ -299,8 +299,14 @@ fn context_used(session_id: &str) -> Option<f64> {
 /// The sessions of every account whose process is still alive (a crashed session leaves its file behind),
 /// the most recently changed first.
 pub fn read(accounts: &[Account]) -> Vec<Session> {
-    let mut sys = sysinfo::System::new();
-    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    // Liveness is checked per session pid (below), never by scanning every process on the PC: a full scan every
+    // 2 s poll cost a whole core with ~100 browser processes around.
+    let alive = |pid: u32| {
+        let mut sys = sysinfo::System::new();
+        let p = sysinfo::Pid::from_u32(pid);
+        sys.refresh_processes_specifics(sysinfo::ProcessesToUpdate::Some(&[p]), true, sysinfo::ProcessRefreshKind::nothing());
+        sys.process(p).is_some()
+    };
     let mut out = vec![];
     for (index, account) in accounts.iter().enumerate() {
         // a GPT account has no sessions here (yet)
@@ -317,7 +323,7 @@ pub fn read(accounts: &[Account]) -> Vec<Session> {
             // a file being rewritten right now is just skipped until the next poll
             let Ok(text) = std::fs::read_to_string(&path) else { continue };
             let Ok(f) = serde_json::from_str::<SessionFile>(&text) else { continue };
-            if sys.process(sysinfo::Pid::from_u32(f.pid)).is_none() {
+            if !alive(f.pid) {
                 continue;
             }
             let session_id = f.session_id.unwrap_or_default();

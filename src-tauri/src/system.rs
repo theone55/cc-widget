@@ -49,9 +49,28 @@ pub struct Sampler {
     no_gpu: bool,
     /// physical cores (sysinfo computes it on every call, so once)
     physical: Option<usize>,
+    /// last CPU temperature read and when; `no_temp` = the PC has no usable sensor, never ask WMI again
+    cpu_temp: Option<f32>,
+    temp_at: Option<Instant>,
+    no_temp: bool,
 }
 
 const GPU_EVERY: Duration = Duration::from_secs(4);
+const TEMP_EVERY: Duration = Duration::from_secs(15);
+
+/// The hottest CPU-looking sensor, None when there is none.
+fn cpu_temp_of(components: &Components) -> Option<f32> {
+    components
+        .iter()
+        .filter(|c| {
+            let l = c.label().to_lowercase();
+            l.contains("cpu") || l.contains("core") || l.contains("package") || l.contains("tctl") || l.contains("tdie")
+                || l.contains("acpi") || l.contains("thermal")
+        })
+        .filter_map(|c| c.temperature())
+        .filter(|t| *t > 1.0 && *t < 125.0)
+        .fold(None, |m: Option<f32>, t| Some(m.map_or(t, |m| m.max(t))))
+}
 
 impl Sampler {
     pub fn new() -> Self {
@@ -59,26 +78,26 @@ impl Sampler {
             RefreshKind::nothing().with_cpu(CpuRefreshKind::nothing().with_cpu_usage()).with_memory(MemoryRefreshKind::nothing().with_ram()),
         );
         let physical = sys.physical_core_count();
-        Sampler { sys, components: None, gpu: None, gpu_at: None, no_gpu: false, physical }
+        Sampler { sys, components: None, gpu: None, gpu_at: None, no_gpu: false, physical, cpu_temp: None, temp_at: None, no_temp: false }
     }
 
     pub fn sample(&mut self, gpu: bool) -> Stats {
         self.sys.refresh_cpu_usage();
         self.sys.refresh_memory_specifics(MemoryRefreshKind::nothing().with_ram());
         let threads: Vec<f32> = self.sys.cpus().iter().map(|c| c.cpu_usage().clamp(0.0, 100.0)).collect();
-        // the sensor list is built once; later only their values are refreshed
-        let components = self.components.get_or_insert_with(Components::new_with_refreshed_list);
-        components.refresh(false);
-        let cpu_temp = components
-            .iter()
-            .filter(|c| {
-                let l = c.label().to_lowercase();
-                l.contains("cpu") || l.contains("core") || l.contains("package") || l.contains("tctl") || l.contains("tdie")
-                    || l.contains("acpi") || l.contains("thermal")
-            })
-            .filter_map(|c| c.temperature())
-            .filter(|t| *t > 1.0 && *t < 125.0)
-            .fold(None, |m: Option<f32>, t| Some(m.map_or(t, |m| m.max(t))));
+        // Sensors on Windows are a WMI query (WmiPrvSE burned ~40 % CPU when this ran every sample): refresh them at
+        // most every TEMP_EVERY, and stop for good when the PC reports no usable CPU temperature.
+        if !self.no_temp && self.temp_at.is_none_or(|at| at.elapsed() >= TEMP_EVERY) {
+            self.temp_at = Some(Instant::now());
+            let components = self.components.get_or_insert_with(Components::new_with_refreshed_list);
+            components.refresh(false);
+            self.cpu_temp = cpu_temp_of(components);
+            if self.cpu_temp.is_none() {
+                self.no_temp = true;
+                self.components = None;
+            }
+        }
+        let cpu_temp = self.cpu_temp;
         if gpu && !self.no_gpu && self.gpu_at.is_none_or(|at| at.elapsed() >= GPU_EVERY) {
             self.gpu_at = Some(Instant::now());
             match nvidia() {
