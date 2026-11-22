@@ -90,7 +90,7 @@ async function applyEffects() {
     const ua = navigator.userAgentData
     if (!ua || ua.platform !== 'Windows') return
     const v = await ua.getHighEntropyValues(['platformVersion'])
-    if (parseInt(v.platformVersion, 10) < 13) return      // Windows 10 reports 10.x, Windows 11 13+
+    if (!(parseInt(v.platformVersion, 10) >= 13)) return  // Windows 10 reports 10.x, Windows 11 13+; unknown = no effect
     await win.setEffects({effects: ['acrylic']})
     document.documentElement.classList.add('fx')
   } catch (e) {}

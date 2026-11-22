@@ -92,10 +92,11 @@ body.dense8 #limits { display: none; }
 @media (max-width: 260px) {
   .pct, .counter-head, .scard .opt { display: none; }
   /* limits as text there: "5ч 41% 7д 76%" fits and says more than two unlabeled bars */
-  .lim .bar { display: none; }
-  .lim .pct, .sysline .pct { display: inline; width: auto; }
-  .lim { display: flex; gap: 4px; }
-  .win { display: flex; gap: 3px; padding: 0; flex: none; }
+  /* #limits-scoped: these must beat the base .lim / .win grid rules declared further down */
+  #limits .lim .bar { display: none; }
+  #limits .lim .pct, .sysline .pct { display: inline; width: auto; }
+  #limits .lim { display: flex; gap: 4px; }
+  #limits .win { display: flex; gap: 3px; padding: 0; flex: none; }
   .tag { width: auto; max-width: 52px; }
   .row .ctxbar { width: 40px; }
   .resets { margin-left: 0 !important; }
@@ -176,7 +177,8 @@ body.dense8 #limits { display: none; }
 :root.light .tag.gemini:not(.off) { color: #0a7fb3; border-color: #0a7fb3; }
 .lim .gerr { grid-column: 2 / 4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip.plan { text-transform: uppercase; letter-spacing: 0.04em; }
-body.dense6 .lim .chip.plan, body.dense6 .lim .chip.blocked { display: none; }
+/* the plan chip goes in dense layouts; a reached limit (blocked) stays visible */
+body.dense6 .lim .chip.plan { display: none; }
 @media (max-width: 260px) { .lim .chip.plan { display: none; } }
 
 /* the System section: three cards (CPU, RAM, GPU) — a fill from the bottom = the load now, a line = the last 2 minutes;
@@ -214,7 +216,7 @@ body.dense6 .lim .chip.plan, body.dense6 .lim .chip.blocked { display: none; }
 .row .rago { font-size: 10px; flex: none; }
 .rsys:not(:empty) { margin-top: 4px; }
 .rsys .scards { grid-auto-rows: minmax(54px, 1fr); }
-body.dense1 .rsys .scards { grid-auto-rows: minmax(40px, 1fr); }
+body.dense1 .rsys .scards { grid-auto-rows: minmax(46px, 1fr); }
 .row { display: flex; align-items: center; gap: 6px; min-height: 20px; cursor: pointer; padding: 0; border-top: 1px solid var(--line); }
 .sh + .row, .rhead + .row { border-top: 0; }
 .row:hover { background: var(--hover); }
