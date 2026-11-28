@@ -326,7 +326,7 @@ fn context_used(session_id: &str) -> Option<f64> {
 /// Is the process running? On Windows one OpenProcess call: sysinfo's per-pid refresh still walks the whole process
 /// table there (~260 ms each, a core burned by the 2 s poll).
 #[cfg(windows)]
-fn pid_alive(pid: u32) -> bool {
+pub fn pid_alive(pid: u32) -> bool {
     use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED};
     use windows_sys::Win32::System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
     const STILL_ACTIVE: u32 = 259;
@@ -344,7 +344,7 @@ fn pid_alive(pid: u32) -> bool {
 }
 
 #[cfg(not(windows))]
-fn pid_alive(pid: u32) -> bool {
+pub fn pid_alive(pid: u32) -> bool {
     let mut sys = sysinfo::System::new();
     let p = sysinfo::Pid::from_u32(pid);
     sys.refresh_processes_specifics(sysinfo::ProcessesToUpdate::Some(&[p]), true, sysinfo::ProcessRefreshKind::nothing());
