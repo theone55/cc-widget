@@ -122,6 +122,11 @@ body.dense8 #limits { display: none; }
 .bgmark.blocked { color: var(--full) !important; }
 .chip { flex: none; font-size: 9px; line-height: 13px; padding: 0 3px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); text-align: center; white-space: nowrap; }
 .chip.blocked { color: var(--full); border-color: var(--full); }
+/* a Gemini / GPT tab of Agora (engine-sessions): the engine's mark like the limit tags; «rig» marks a debug window */
+.chip.eng.gemini { color: #64cfff; border-color: #64cfff; border-style: dashed; }
+:root.light .chip.eng.gemini { color: #0a7fb3; border-color: #0a7fb3; }
+.chip.eng.gpt { color: var(--accent); border-color: var(--accent); border-style: dashed; }
+.chip.rig { color: var(--warn); border-color: var(--warn); }
 #box.blocked { border-color: var(--full); }
 .row.blocked .name { color: var(--full); font-weight: 650; }
 .row.blocked { background: color-mix(in srgb, var(--full) 14%, transparent); }

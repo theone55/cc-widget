@@ -110,9 +110,9 @@ function setHtml(el, html) {
 function render() {
   if (!S || editing) return
   const shown = sessions.filter(s => S.showBackground || s.kind !== 'bg')
-  const busy = shown.filter(s => state(s) === 'busy').length + (S.remote.enabled ? remoteBusy() : 0)
+  const busy = shown.filter(s => state(s) === 'busy').length + engineSessions.filter(e => engState(e) === 'busy').length + (S.remote.enabled ? remoteBusy() : 0)
   const blocked = shown.filter(s => state(s) === 'blocked').length
-  const wait = shown.filter(s => state(s) === 'wait').length + blocked
+  const wait = shown.filter(s => state(s) === 'wait').length + engineSessions.filter(e => engState(e) === 'wait').length + blocked
   $('box').classList.toggle('waiting', wait > 0)
   $('box').classList.toggle('blocked', blocked > 0)
   document.body.classList.toggle('open', !!S.expanded)
@@ -150,7 +150,8 @@ function render() {
   // GPT calls whose parent session is not in the list (closed, another machine) are top-level rows
   const shownIds = new Set(shown.map(s => s.sessionId))
   const gptOrphans = gptRuns.filter(g => !shownIds.has(g.sessionId)).map(g => gptRunRow(g, false)).join('')
-  setHtml($('list'), heading(T.secSessions) + (!shown.length && gptOrphans ? gptOrphans : shown.length ? shown.map(s => {
+  const engineRows = engineSessions.map(engineRow).join('')
+  setHtml($('list'), heading(T.secSessions) + (!shown.length && (gptOrphans || engineRows) ? gptOrphans + engineRows : shown.length ? shown.map(s => {
     const st = state(s)
     const ctx = s.context != null ? Math.round(s.context) : null
     const hint = ctx == null ? '' : ctx >= th.contextFull ? ' — ' + T.clear : ctx >= th.contextWarn ? ' — ' + T.compact : ''
@@ -184,7 +185,7 @@ function render() {
     ${now ? `<div class="sub details task">▶ ${now.percent}% ${esc(now.title)}</div>` : ''}
     ${(S.showSubagents !== false && s.subagents || []).map(subagentRow).join('')}` +
       gptRuns.filter(g => g.sessionId === s.sessionId).map(g => gptRunRow(g, true)).join('')
-  }).join('') + gptOrphans : `<div class="empty">${T.noSessions}</div>`))
+  }).join('') + gptOrphans + engineRows : `<div class="empty">${T.noSessions}</div>`))
 
   setHtml($('counter'), !S.counter.enabled ? '' : Array.isArray(counter)
     ? `<b>${esc(S.counter.label)}</b> ` + S.counter.fields.map((f, i) => `${esc(fieldName(f))} <b>${esc(counter[i] ?? '–')}</b>`).join(' · ')
@@ -194,6 +195,29 @@ function render() {
   for (const i of document.querySelectorAll('.bar i')) i.style.width = i.dataset.p + '%'
   paintAccounts($('view'))
   fit()
+}
+
+// A Gemini / GPT tab of Agora (engine-sessions/*.json, enginesessions.rs): Claude Code writes no file for them, Agora does.
+// busy → working; ask / error / limit → waiting; idle → idle (the state comes ready from the Rust side). The engine's mark
+// as a chip, «rig» for a debug / rig window. No attach, no stop: a click focuses the Agora window by its pid.
+// The text comes from files, so it only ever goes through esc().
+let engineSessions = []
+const engState = (e) => e.state === 'working' ? 'busy' : e.state === 'waiting' ? 'wait' : 'idle'
+const engKey = (e) => `${e.pid}-${e.tabId}`
+const ENGINE_MARK = {gemini: 'Gemini', gpt: 'GPT'}
+function engineRow(e) {
+  const st = engState(e)
+  const name = e.title || folder(e.cwd) || e.account || ENGINE_MARK[e.engine]
+  const statusText = st === 'busy' ? T.working : st === 'wait' ? (T['eng_' + e.status] || T.waitsForYou) : T.free
+  const doing = [statusText + ' ' + ago(e.updatedAt || e.startedAt || Date.now()), e.doing].filter(Boolean).join(' · ')
+  const tip = [name, e.cwd, doing, e.model && `${T.model}: ${e.model}`, e.account && `${ENGINE_MARK[e.engine]} · ${e.account}`,
+    e.debug && T.rigHint].filter(Boolean).join('\n')
+  return `<div class="row ${st} engine" data-eng="${esc(engKey(e))}" title="${esc(tip)}">
+      <span class="dot ${st}"></span>
+      <span class="name">${esc(name)}</span>
+      <span class="chip eng ${esc(e.engine)}">${esc(ENGINE_MARK[e.engine])}</span>${e.debug ? '<span class="chip rig">rig</span>' : ''}
+    </div>
+    <div class="sub details">${esc(folder(e.cwd) || '')} · ${esc(doing)}</div>`
 }
 
 // a running GPT call (run file of gpt-run.js): a child row under the session that started it, like a delegate's row.
@@ -546,6 +570,9 @@ $('head').addEventListener('mouseup', async e => {
 $('list').addEventListener('mousedown', e => {
   if (e.button !== 0) return
   const row = e.target.closest('.row')
+  // a Gemini / GPT tab: focus the Agora window (no attach, no tab switching yet)
+  const eng = row && row.dataset.eng && engineSessions.find(x => engKey(x) === row.dataset.eng)
+  if (eng) return invoke('focus_session', {pid: eng.pid, cwd: eng.cwd}).catch(() => {})
   const s = row && sessions.find(x => x.sessionId === row.dataset.id)
   if (!s) return
   seen[s.sessionId] = s.since
@@ -731,6 +758,7 @@ async function pollSessions() {
   limits = await invoke('limits').catch(() => [])
   gpt = await invoke('gpt_limits').catch(() => [])
   gemini = await invoke('gemini_limits').catch(() => [])
+  engineSessions = await invoke('engine_sessions').catch(() => [])
   const gr = await invoke('gpt_runs').catch(() => [])
   if (JSON.stringify([gr, Math.floor(Date.now() / 60000)]) !== JSON.stringify([gptRuns, gptMin])) { gptMin = Math.floor(Date.now() / 60000); gptRuns = gr; lastPoll = '' }
   // forget "seen" marks of sessions that are gone
@@ -738,7 +766,7 @@ async function pollSessions() {
   for (const k of Object.keys(seen)) if (!ids.has(k)) delete seen[k]
   save('seen', seen)
   // redraw only when something changed (the ages in the details tick by the minute)
-  const key = JSON.stringify([sessions, limits, gpt, gemini, Math.floor(Date.now() / 60000)])
+  const key = JSON.stringify([sessions, engineSessions, limits, gpt, gemini, Math.floor(Date.now() / 60000)])
   if (key === lastPoll) return
   lastPoll = key
   render()

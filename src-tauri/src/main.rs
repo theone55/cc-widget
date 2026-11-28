@@ -7,6 +7,7 @@
 
 mod codex;
 mod counter;
+mod enginesessions;
 mod focus;
 mod gemini;
 mod gptruns;
@@ -76,6 +77,12 @@ async fn sessions(state: tauri::State<'_, AppState>) -> Result<Vec<sessions::Ses
     let accounts = current(&state).accounts;
     // a few small files and the process list: quick, but off the UI thread anyway
     tauri::async_runtime::spawn_blocking(move || sessions::read(&accounts)).await.map_err(|e| e.to_string())
+}
+
+/// Gemini / GPT tabs of Agora and rig runs (their files in `<local data>/agora/engine-sessions/`)
+#[tauri::command]
+async fn engine_sessions() -> Result<Vec<enginesessions::EngineSession>, String> {
+    tauri::async_runtime::spawn_blocking(enginesessions::read).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -246,6 +253,7 @@ fn main() {
             size_set,
             detect_accounts,
             sessions,
+            engine_sessions,
             limits,
             detect_codex,
             gpt_limits,
