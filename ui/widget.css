@@ -237,6 +237,10 @@ body.dense1 .rsys .scards { grid-auto-rows: minmax(46px, 1fr); }
 .details { display: none; }
 body.open .details { display: block; }
 body.open .sub.details { display: block; }
+/* collapsed view: a working row says what it is doing in one line, in every dense layout too (owner 28.11: «что
+   делают» must be seen without opening); the open view has the full details instead (until dense2 hides them) */
+.sub.nowline { margin-top: -3px; }
+body.open:not(.dense2) .sub.nowline { display: none; }   /* dense2+ hides the details, so the line stays */
 
 /* settings */
 #settings { flex: 1; min-height: 0; overflow-y: auto; }

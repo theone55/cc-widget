@@ -183,6 +183,7 @@ function render() {
     </div>
     <div class="sub details">${esc(folder(s.cwd))}${s.kind === 'bg' ? ' · ' + T.bg : ''} · ${doing}${hint}</div>
     ${now ? `<div class="sub details task">▶ ${now.percent}% ${esc(now.title)}</div>` : ''}
+    ${st === 'busy' && now ? `<div class="sub nowline">▶ ${esc(now.title)}</div>` : ''}
     ${(S.showSubagents !== false && s.subagents || []).map(subagentRow).join('')}` +
       gptRuns.filter(g => g.sessionId === s.sessionId).map(g => gptRunRow(g, true)).join('')
   }).join('') + gptOrphans + engineRows : `<div class="empty">${T.noSessions}</div>`))
@@ -217,7 +218,8 @@ function engineRow(e) {
       <span class="name">${esc(name)}</span>
       <span class="chip eng ${esc(e.engine)}">${esc(ENGINE_MARK[e.engine])}</span>${e.debug ? '<span class="chip rig">rig</span>' : ''}
     </div>
-    <div class="sub details">${esc(folder(e.cwd) || '')} · ${esc(doing)}</div>`
+    <div class="sub details">${esc(folder(e.cwd) || '')} · ${esc(doing)}</div>
+    ${st === 'busy' && e.doing ? `<div class="sub nowline">▶ ${esc(e.doing)}</div>` : ''}`
 }
 
 // a running GPT call (run file of gpt-run.js): a child row under the session that started it, like a delegate's row.
